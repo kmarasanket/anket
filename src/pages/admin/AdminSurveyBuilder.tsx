@@ -114,16 +114,25 @@ export default function AdminSurveyBuilder() {
   }
 
   const handleSave = async () => {
-    if (!tenant) return
+    if (!tenant || !user) {
+        addNotification('Kurum veya kullanıcı bilgisi eksik, lütfen sayfayı yenileyin.', 'error')
+        return
+    }
     
-    // Anket başlığı kontrolü
     if (!surveyData.title.trim()) {
-      addNotification('Lütfen bir anket başlığı girin. Başlığı olmayan bir anket kaydedilemez.', 'warning')
+      addNotification('Lütfen bir anket başlığı girin.', 'warning')
       return
     }
 
     setSaving(true)
     
+    // Zaman aşımı yardımcısı (20 saniye)
+    const withTimeout = (promise: any) => 
+      Promise.race([
+        Promise.resolve(promise),
+        new Promise((_, m) => setTimeout(() => m(new Error('İşlem 20 saniye içinde yanıt vermedi (Zaman Aşımı).')), 20000))
+      ])
+
     try {
       console.log('Save process started...')
       let currentSurveyId = id
@@ -131,57 +140,81 @@ export default function AdminSurveyBuilder() {
       // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
         console.log('Creating new survey...')
-        if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
+        const { data, error: surveyError } = await withTimeout(
+          supabase.from('surveys').insert({
+            tenant_id: tenant.id,
+            created_by: user.id,
+            title: surveyData.title.trim(),
+            description: surveyData.description,
+            slug: slugify(surveyData.title) + '-' + Math.random().toString(36).substr(2, 5),
+            status: surveyData.status,
+            welcome_message: surveyData.welcome_message,
+            thank_you_message: surveyData.thank_you_message,
+            settings: {}
+          }).select()
+        )
         
-        const { data: newSurvey, error: surveyError } = await supabase.from('surveys').insert({
-          tenant_id: tenant.id,
-          created_by: user.id,
-          title: surveyData.title.trim(),
-          description: surveyData.description,
-          slug: slugify(surveyData.title) + '-' + Math.random().toString(36).substr(2, 5),
-          status: surveyData.status,
-          welcome_message: surveyData.welcome_message,
-          thank_you_message: surveyData.thank_you_message,
-        }).select().single()
+        if (surveyError) {
+          console.error('Survey Insert Error:', surveyError)
+          throw surveyError
+        }
+        if (!data || data.length === 0) {
+          throw new Error('Anket oluşturuldu ancak veri geri okunamadı (RLS Kısıtlaması olabilir).')
+        }
         
-        if (surveyError) throw surveyError
-        if (!newSurvey) throw new Error('Anket oluşturuldu ancak veri geri alınamadı.')
-        currentSurveyId = newSurvey.id
+        currentSurveyId = data[0].id
         console.log('New survey created with ID:', currentSurveyId)
       } else {
         console.log('Updating existing survey:', currentSurveyId)
-        const { error: updateError } = await supabase.from('surveys').update({
-          title: surveyData.title.trim(),
-          description: surveyData.description,
-          status: surveyData.status,
-          welcome_message: surveyData.welcome_message,
-          thank_you_message: surveyData.thank_you_message,
-        }).eq('id', currentSurveyId)
+        const { error: updateError } = await withTimeout(
+          supabase.from('surveys').update({
+            title: surveyData.title.trim(),
+            description: surveyData.description,
+            status: surveyData.status,
+            welcome_message: surveyData.welcome_message,
+            thank_you_message: surveyData.thank_you_message,
+            updated_at: new Date().toISOString()
+          }).eq('id', currentSurveyId)
+        )
         
-        if (updateError) throw updateError
+        if (updateError) {
+          console.error('Survey Update Error:', updateError)
+          throw updateError
+        }
       }
 
       if (!currentSurveyId) throw new Error('Survey ID belirlenemedi.')
 
-      // 2. Önceki soruları sil
-      console.log('Deleting previous questions...')
-      const { error: deleteError } = await supabase.from('questions').delete().eq('survey_id', currentSurveyId)
-      if (deleteError) throw deleteError
+      // 2. Önceki soruları sil (Sync questions logic)
+      console.log('Syncing questions...')
+      const { error: deleteError } = await withTimeout(
+        supabase.from('questions').delete().eq('survey_id', currentSurveyId)
+      )
+      if (deleteError) {
+        console.error('Questions Delete Error:', deleteError)
+        throw deleteError
+      }
 
-      // 3. Yeni/Mevcut soruları kaydet
+      // 3. Yeni soruları kaydet
       if (questions.length > 0) {
         console.log('Inserting', questions.length, 'questions...')
         const questionsToInsert = questions.map((q, idx) => ({
           survey_id: currentSurveyId,
           type: q.type,
-          title: q.title,
+          title: q.title || 'İsimsiz Soru',
           description: q.description || null,
           options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null,
-          is_required: q.is_required,
+          is_required: !!q.is_required,
           order_index: idx,
+          settings: {}
         }))
-        const { error: insertError } = await supabase.from('questions').insert(questionsToInsert)
-        if (insertError) throw insertError
+        const { error: insertError } = await withTimeout(
+          supabase.from('questions').insert(questionsToInsert)
+        )
+        if (insertError) {
+          console.error('Questions Insert Error:', insertError)
+          throw insertError
+        }
         console.log('Questions inserted successfully.')
       }
 
@@ -189,14 +222,16 @@ export default function AdminSurveyBuilder() {
       addNotification('Anket başarıyla kaydedildi.', 'success')
       navigate('/admin/anketler')
     } catch (e: any) {
-      console.error('Save error details:', e)
-      addNotification('Kaydedilirken hata oluştu: ' + (e.message || 'Bilinmeyen hata'), 'error')
+      console.error('CRITICAL SAVE ERROR:', e)
+      const errorMsg = e.message || 'Bilinmeyen bir hata oluştu.'
+      addNotification('Kayıt başarısız: ' + errorMsg, 'error')
+      window.alert('HATA: ' + errorMsg + '\n\nKonsoldaki (F12) detaylara bakın.')
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <div className="p-12 text-center">Yükleniyor...</div>
+  if (loading) return <div className="p-12 text-center text-dark-400">Veriler yükleniyor...</div>
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20 animate-in">
