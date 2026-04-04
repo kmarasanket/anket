@@ -10,7 +10,7 @@ export default function SAUsersPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', password: '' })
+  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', password: '', password_confirm: '' })
 
   const fetchData = async () => {
     const [profilesRes, tenantsRes] = await Promise.all([
@@ -31,6 +31,11 @@ export default function SAUsersPage() {
 
   const handleCreate = async () => {
     if (!formData.email || !formData.full_name || !formData.password) return
+    if (formData.password !== formData.password_confirm) {
+        alert("Girdiğiniz şifreler eşleşmiyor, lütfen kontrol ediniz.")
+        return
+    }
+
     setSaving(true)
     try {
       const { createClient } = await import('@supabase/supabase-js')
@@ -57,7 +62,11 @@ export default function SAUsersPage() {
         if (profileError) throw profileError
       }
     } catch (err: any) {
-      alert("Kullanıcı eklenemedi: " + err.message)
+      if (err.message.includes("already registered")) {
+        alert("Kullanıcı daha önceden sisteme (auth) eklenmiş kalmış! Lütfen Supabase -> Authentication -> Users sekmesinden o kullanıcıyı (necipfazilsh) bulup tamamen silin ve buradan tekrar ekleyin.")
+      } else {
+        alert("Kullanıcı eklenemedi: " + err.message)
+      }
     }
     setSaving(false)
     setShowForm(false)
@@ -105,7 +114,12 @@ export default function SAUsersPage() {
               <div>
                 <label className="label">Şifre *</label>
                 <input value={formData.password} onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
-                  type="password" placeholder="En az 8 karakter" className="input" />
+                  type="password" placeholder="En az 6 karakter" className="input" />
+              </div>
+              <div>
+                <label className="label">Şifre Tekrarı *</label>
+                <input value={formData.password_confirm} onChange={e => setFormData(p => ({ ...p, password_confirm: e.target.value }))}
+                  type="password" placeholder="Şifrenizi doğrulayın" className="input" />
               </div>
               <div>
                 <label className="label">Rol</label>
