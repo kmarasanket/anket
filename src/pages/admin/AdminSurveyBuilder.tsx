@@ -126,45 +126,37 @@ export default function AdminSurveyBuilder() {
 
     setSaving(true)
     
-    // Zaman aşımı yardımcısı (20 saniye)
+    // Zaman aşımı yardımcısı (60 saniye - Veritabanı hatasını beklemek için)
     const withTimeout = (promise: any) => 
       Promise.race([
         Promise.resolve(promise),
-        new Promise((_, m) => setTimeout(() => m(new Error('İşlem 20 saniye içinde yanıt vermedi (Zaman Aşımı).')), 20000))
+        new Promise((_, m) => setTimeout(() => m(new Error('İşlem 60 saniye içinde yanıt vermedi (Zaman Aşımı). Lütfen SQL optimizasyonunu çalıştırın.')), 60000))
       ])
 
     try {
-      console.log('Save process started...')
-      console.log('Title length:', surveyData.title.length)
-      console.log('Description length:', surveyData.description.length)
-      
+      console.log('Minimalist save process started...')
       let currentSurveyId = id
       
       // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
-        console.log('Creating new survey with client-side UUID...')
+        console.log('Creating new survey (Minimalist)...')
         if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
         
         const newId = uuidv4()
-        
-        // Slug'ı 40 karaktere sabitleyelim (Index performans ve uzun metin sorunlarını aşmak için)
-        const baseSlug = slugify(surveyData.title).substring(0, 40)
+        const baseSlug = slugify(surveyData.title).substring(0, 30)
         const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
         
-        console.log('Generated Slug:', finalSlug)
-
+        // Sadece ZORUNLU (NOT NULL) alanları gönderiyoruz
         const { error: surveyError } = await withTimeout(
           supabase.from('surveys').insert({
             id: newId,
             tenant_id: tenant.id,
-            created_by: user.id,
             title: surveyData.title.trim(),
-            description: surveyData.description,
+            description: surveyData.description || null,
             slug: finalSlug,
             status: surveyData.status,
-            welcome_message: surveyData.welcome_message,
-            thank_you_message: surveyData.thank_you_message,
-            settings: {}
+            welcome_message: surveyData.welcome_message || null,
+            thank_you_message: surveyData.thank_you_message || null
           })
         )
         
@@ -180,10 +172,10 @@ export default function AdminSurveyBuilder() {
         const { error: updateError } = await withTimeout(
           supabase.from('surveys').update({
             title: surveyData.title.trim(),
-            description: surveyData.description,
+            description: surveyData.description || null,
             status: surveyData.status,
-            welcome_message: surveyData.welcome_message,
-            thank_you_message: surveyData.thank_you_message,
+            welcome_message: surveyData.welcome_message || null,
+            thank_you_message: surveyData.thank_you_message || null,
             updated_at: new Date().toISOString()
           }).eq('id', currentSurveyId)
         )
@@ -209,21 +201,22 @@ export default function AdminSurveyBuilder() {
       // 3. Yeni soruları kaydet
       if (questions.length > 0) {
         console.log('Inserting', questions.length, 'questions...')
+        // Questions tablosunu da minimalist yapıyoruz
         const questionsToInsert = questions.map((q, idx) => ({
           survey_id: currentSurveyId,
           type: q.type,
           title: q.title || 'İsimsiz Soru',
-          description: q.description || null,
-          options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null,
           is_required: !!q.is_required,
           order_index: idx,
-          settings: {}
+          options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null,
+          description: q.description || null
         }))
+        
         const { error: insertError } = await withTimeout(
           supabase.from('questions').insert(questionsToInsert)
         )
         if (insertError) {
-          console.error('Questions Insert Error:', insertError)
+          console.error('Questions Insert Error Detail:', insertError)
           throw insertError
         }
         console.log('Questions inserted successfully.')
@@ -236,7 +229,10 @@ export default function AdminSurveyBuilder() {
       console.error('CRITICAL SAVE ERROR:', e)
       const errorMsg = e.message || 'Bilinmeyen bir hata oluştu.'
       addNotification('Kayıt başarısız: ' + errorMsg, 'error')
-      window.alert('HATA: ' + errorMsg + '\n\nKonsoldaki (F12) detaylara bakın.')
+      
+      // TÜM OBJEYİ GÖRSELE YANSITMAK
+      const fullError = typeof e === 'object' ? JSON.stringify(e, null, 2) : e
+      window.alert('HATA AYRINTILARI:\n\n' + fullError + '\n\nEğer Timeout alıyorsanız lütfen iletilen SQL kodunu çalıştırın.')
     } finally {
       setSaving(false)
     }
