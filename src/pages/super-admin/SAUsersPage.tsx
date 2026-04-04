@@ -32,21 +32,32 @@ export default function SAUsersPage() {
   const handleCreate = async () => {
     if (!formData.email || !formData.full_name || !formData.password) return
     setSaving(true)
-    // Supabase Auth ile kullanıcı oluştur (admin API gerektirir - edge function ile yapılır)
-    // Şimdilik profiles tablosuna ekliyoruz
-    const { data: authData } = await supabase.auth.admin?.createUser({
-      email: formData.email,
-      password: formData.password,
-      email_confirm: true,
-    }) || {}
-    if (authData?.user) {
-      await supabase.from('profiles').insert({
-        id: authData.user.id,
-        full_name: formData.full_name,
-        role: formData.role,
-        tenant_id: formData.role === 'admin' ? formData.tenant_id : null,
-        is_active: true,
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const tempSupabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL as string,
+        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+        { auth: { persistSession: false } }
+      )
+
+      const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
       })
+      if (authError) throw authError
+
+      if (authData?.user) {
+        const { error: profileError } = await supabase.from('profiles').insert({
+          id: authData.user.id,
+          full_name: formData.full_name,
+          role: formData.role,
+          tenant_id: formData.role === 'admin' ? formData.tenant_id : null,
+          is_active: true,
+        })
+        if (profileError) throw profileError
+      }
+    } catch (err: any) {
+      alert("Kullanıcı eklenemedi: " + err.message)
     }
     setSaving(false)
     setShowForm(false)
