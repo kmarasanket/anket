@@ -31,7 +31,7 @@ export default function AdminSurveyBuilder() {
   
   // Anket Ana Bilgileri
   const [surveyData, setSurveyData] = useState({
-    title: 'İsimsiz Anket',
+    title: '',
     description: '',
     status: 'draft' as 'draft' | 'active' | 'closed',
     welcome_message: '',
@@ -66,7 +66,7 @@ export default function AdminSurveyBuilder() {
       id: uuidv4(),
       survey_id: id || '',
       type: 'text' as QuestionType,
-      title: 'Soru Başlığı',
+      title: '',
       description: '',
       is_required: true,
       options: ['Seçenek 1'], // Sadece radio/checkbox için gerekli
@@ -81,8 +81,8 @@ export default function AdminSurveyBuilder() {
       id: uuidv4(),
       survey_id: id || '',
       type: 'section' as QuestionType,
-      title: 'Yeni Bölüm',
-      description: 'Bölüm alt başlığı (isteğe bağlı)',
+      title: '',
+      description: '',
       is_required: false,
       options: null,
       order_index: questions.length,
@@ -192,7 +192,7 @@ export default function AdminSurveyBuilder() {
             value={surveyData.title}
             onChange={e => setSurveyData({...surveyData, title: e.target.value})}
             className="w-full bg-transparent text-4xl font-display font-bold text-dark-50 focus:outline-none placeholder-dark-600"
-            placeholder="Anket Başlığı"
+            placeholder="İsimsiz Anket"
           />
           <textarea 
             value={surveyData.description}
@@ -218,22 +218,22 @@ export default function AdminSurveyBuilder() {
                   <input 
                     value={q.title}
                     onChange={e => updateQuestion(qIndex, { title: e.target.value })}
-                    className="input text-2xl font-display font-bold bg-dark-900 border-none border-b border-dark-700 rounded-none px-0 text-purple-400 focus:border-purple-500 w-full"
-                    placeholder="Bölüm Başlığı..."
+                    className="input text-2xl font-display font-bold bg-dark-900 border-none border-b border-dark-700 rounded-none px-0 text-purple-400 focus:border-purple-500 w-full placeholder-purple-500/30"
+                    placeholder="Yeni Bölüm"
                   />
                   <input 
                     value={q.description || ''}
                     onChange={e => updateQuestion(qIndex, { description: e.target.value })}
-                    className="input text-sm text-dark-300 bg-transparent border-none px-0 w-full focus:ring-0"
-                    placeholder="Bölüm açıklaması (isteğe bağlı)..."
+                    className="input text-sm text-dark-300 bg-transparent border-none px-0 w-full focus:ring-0 placeholder-dark-500"
+                    placeholder="Bölüm alt başlığı (isteğe bağlı)"
                   />
                 </div>
               ) : (
                 <input 
                   value={q.title}
                   onChange={e => updateQuestion(qIndex, { title: e.target.value })}
-                  className="input text-lg font-medium bg-dark-950 border-dark-800 flex-1"
-                  placeholder="Soru metni..."
+                  className="input text-lg font-medium bg-dark-950 border-dark-800 flex-1 placeholder-dark-600"
+                  placeholder="Soru Başlığı"
                 />
               )}
               <select 
