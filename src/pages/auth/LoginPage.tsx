@@ -60,7 +60,7 @@ export default function LoginPage() {
                 <span className="gradient-text">Yönetim Sistemi</span>
               </h1>
               <p className="text-dark-300 text-lg leading-relaxed">
-                LimeSurvey'in gücünü Google Forms'un sadeliğiyle birleştiren, tamamen size ait platform.
+                Sağlıkta Kalite ve Sağlık Tesisi Denetim Standartlarıyla Uyumlu Anket Platformu
               </p>
             </div>
 
