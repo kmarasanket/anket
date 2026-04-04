@@ -134,39 +134,39 @@ export default function AdminSurveyBuilder() {
       ])
 
     try {
-      console.log('Minimalist save process started...')
+      console.log('RPC save process started...')
       let currentSurveyId = id
       
       // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
-        console.log('Creating new survey (Minimalist)...')
+        console.log('Creating new survey via Database RPC (Bypassing RLS delays)...')
         if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
         
         const newId = uuidv4()
         const baseSlug = slugify(surveyData.title).substring(0, 30)
         const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
         
-        // Sadece ZORUNLU (NOT NULL) alanları gönderiyoruz
-        const { error: surveyError } = await withTimeout(
-          supabase.from('surveys').insert({
-            id: newId,
-            tenant_id: tenant.id,
-            title: surveyData.title.trim(),
-            description: surveyData.description || null,
-            slug: finalSlug,
-            status: surveyData.status,
-            welcome_message: surveyData.welcome_message || null,
-            thank_you_message: surveyData.thank_you_message || null
+        // RPC Çağrısı (create_survey_secure SQL fonksiyonunu kullanıyoruz)
+        const { error: rpcError } = await withTimeout(
+          supabase.rpc('create_survey_secure', {
+            p_id: newId,
+            p_tenant_id: tenant.id,
+            p_title: surveyData.title.trim(),
+            p_description: surveyData.description || null,
+            p_slug: finalSlug,
+            p_status: surveyData.status,
+            p_welcome_message: surveyData.welcome_message || null,
+            p_thank_you_message: surveyData.thank_you_message || null
           })
         )
         
-        if (surveyError) {
-          console.error('Survey Insert Error Detail:', surveyError)
-          throw surveyError
+        if (rpcError) {
+          console.error('RPC Error Detail:', rpcError)
+          throw rpcError
         }
         
         currentSurveyId = newId
-        console.log('New survey inserted successfully with ID:', currentSurveyId)
+        console.log('New survey created successfully via RPC with ID:', currentSurveyId)
       } else {
         console.log('Updating existing survey:', currentSurveyId)
         const { error: updateError } = await withTimeout(
