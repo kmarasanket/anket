@@ -134,31 +134,37 @@ export default function AdminSurveyBuilder() {
       ])
 
     try {
-      console.log('RPC save process started...')
+      console.log('Raw RPC save process started...')
+      
+      // TEST: Metni 10 karaktere indiriyoruz (Zorla Kırpma)
+      const testTitle = surveyData.title.trim().substring(0, 10)
+      const testDesc = (surveyData.description || '').substring(0, 10)
+      
+      console.log('Testing with truncated title:', testTitle)
+      console.log('Testing with truncated description:', testDesc)
+
       let currentSurveyId = id
       
       // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
-        console.log('Creating new survey via Database RPC (Bypassing RLS delays)...')
+        console.log('Creating new survey via Database RPC (Raw Mode)...')
         if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
         
         const newId = uuidv4()
-        const baseSlug = slugify(surveyData.title).substring(0, 30)
+        const baseSlug = slugify(surveyData.title).substring(0, 20)
         const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
         
-        // RPC Çağrısı (create_survey_secure SQL fonksiyonunu kullanıyoruz)
-        const { error: rpcError } = await withTimeout(
-          supabase.rpc('create_survey_secure', {
+        // Ham RPC Çağrısı (Zaman aşımı kontrolü kaldırıldı)
+        const { error: rpcError } = await supabase.rpc('create_survey_secure', {
             p_id: newId,
             p_tenant_id: tenant.id,
-            p_title: surveyData.title.trim(),
-            p_description: surveyData.description || null,
+            p_title: testTitle, // Kırpılmış başlık
+            p_description: testDesc, // Kırpılmış alt başlık
             p_slug: finalSlug,
             p_status: surveyData.status,
-            p_welcome_message: surveyData.welcome_message || null,
-            p_thank_you_message: surveyData.thank_you_message || null
-          })
-        )
+            p_welcome_message: (surveyData.welcome_message || '').substring(0, 10),
+            p_thank_you_message: (surveyData.thank_you_message || '').substring(0, 10)
+        })
         
         if (rpcError) {
           console.error('RPC Error Detail:', rpcError)
@@ -166,19 +172,15 @@ export default function AdminSurveyBuilder() {
         }
         
         currentSurveyId = newId
-        console.log('New survey created successfully via RPC with ID:', currentSurveyId)
+        console.log('New survey created successfully with ID:', currentSurveyId)
       } else {
-        console.log('Updating existing survey:', currentSurveyId)
-        const { error: updateError } = await withTimeout(
-          supabase.from('surveys').update({
-            title: surveyData.title.trim(),
-            description: surveyData.description || null,
+        console.log('Updating existing survey (Raw Mode):', currentSurveyId)
+        const { error: updateError } = await supabase.from('surveys').update({
+            title: testTitle,
+            description: testDesc,
             status: surveyData.status,
-            welcome_message: surveyData.welcome_message || null,
-            thank_you_message: surveyData.thank_you_message || null,
             updated_at: new Date().toISOString()
-          }).eq('id', currentSurveyId)
-        )
+        }).eq('id', currentSurveyId)
         
         if (updateError) {
           console.error('Survey Update Error Detail:', updateError)
@@ -189,10 +191,8 @@ export default function AdminSurveyBuilder() {
       if (!currentSurveyId) throw new Error('Survey ID belirlenemedi.')
 
       // 2. Önceki soruları sil (Sync questions logic)
-      console.log('Syncing questions for survey:', currentSurveyId)
-      const { error: deleteError } = await withTimeout(
-        supabase.from('questions').delete().eq('survey_id', currentSurveyId)
-      )
+      console.log('Syncing questions (Raw Mode)...')
+      const { error: deleteError } = await supabase.from('questions').delete().eq('survey_id', currentSurveyId)
       if (deleteError) {
         console.error('Questions Delete Error Detail:', deleteError)
         throw deleteError
@@ -200,21 +200,18 @@ export default function AdminSurveyBuilder() {
 
       // 3. Yeni soruları kaydet
       if (questions.length > 0) {
-        console.log('Inserting', questions.length, 'questions...')
-        // Questions tablosunu da minimalist yapıyoruz
+        console.log('Inserting', questions.length, 'questions (Raw Mode)...')
         const questionsToInsert = questions.map((q, idx) => ({
           survey_id: currentSurveyId,
           type: q.type,
-          title: q.title || 'İsimsiz Soru',
+          title: (q.title || 'İsimsiz Soru').substring(0, 20), // Soru başlıklarını da kırpıyoruz
           is_required: !!q.is_required,
           order_index: idx,
           options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null,
-          description: q.description || null
+          description: (q.description || '').substring(0, 20)
         }))
         
-        const { error: insertError } = await withTimeout(
-          supabase.from('questions').insert(questionsToInsert)
-        )
+        const { error: insertError } = await supabase.from('questions').insert(questionsToInsert)
         if (insertError) {
           console.error('Questions Insert Error Detail:', insertError)
           throw insertError
@@ -226,13 +223,12 @@ export default function AdminSurveyBuilder() {
       addNotification('Anket başarıyla kaydedildi.', 'success')
       navigate('/admin/anketler')
     } catch (e: any) {
-      console.error('CRITICAL SAVE ERROR:', e)
+      console.error('CRITICAL RAW ERROR:', e)
       const errorMsg = e.message || 'Bilinmeyen bir hata oluştu.'
       addNotification('Kayıt başarısız: ' + errorMsg, 'error')
       
-      // TÜM OBJEYİ GÖRSELE YANSITMAK
       const fullError = typeof e === 'object' ? JSON.stringify(e, null, 2) : e
-      window.alert('HATA AYRINTILARI:\n\n' + fullError + '\n\nEğer Timeout alıyorsanız lütfen iletilen SQL kodunu çalıştırın.')
+      window.alert('HATA AYRINTILARI (Ham Mod):\n\n' + fullError + '\n\nEğer bu ekran uzun sürüyorsa tarayıcı Ağ (Network) sekmesini kontrol edin.')
     } finally {
       setSaving(false)
     }
