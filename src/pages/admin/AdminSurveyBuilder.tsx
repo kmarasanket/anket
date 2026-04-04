@@ -25,7 +25,7 @@ const QUESTION_TYPES: { type: QuestionType; label: string; icon: any }[] = [
 export default function AdminSurveyBuilder() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { tenant } = useAuthStore()
+  const { tenant, user } = useAuthStore()
   const { addNotification } = useNotificationStore()
   
   const [loading, setLoading] = useState(!!id)
@@ -125,13 +125,18 @@ export default function AdminSurveyBuilder() {
     setSaving(true)
     
     try {
+      console.log('Save process started...')
       let currentSurveyId = id
       
       // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
+        console.log('Creating new survey...')
+        if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
+        
         const { data: newSurvey, error: surveyError } = await supabase.from('surveys').insert({
           tenant_id: tenant.id,
-          title: surveyData.title.trim(), // Boşlukları temizle
+          created_by: user.id,
+          title: surveyData.title.trim(),
           description: surveyData.description,
           slug: slugify(surveyData.title) + '-' + Math.random().toString(36).substr(2, 5),
           status: surveyData.status,
@@ -140,8 +145,11 @@ export default function AdminSurveyBuilder() {
         }).select().single()
         
         if (surveyError) throw surveyError
+        if (!newSurvey) throw new Error('Anket oluşturuldu ancak veri geri alınamadı.')
         currentSurveyId = newSurvey.id
+        console.log('New survey created with ID:', currentSurveyId)
       } else {
+        console.log('Updating existing survey:', currentSurveyId)
         const { error: updateError } = await supabase.from('surveys').update({
           title: surveyData.title.trim(),
           description: surveyData.description,
@@ -153,12 +161,16 @@ export default function AdminSurveyBuilder() {
         if (updateError) throw updateError
       }
 
+      if (!currentSurveyId) throw new Error('Survey ID belirlenemedi.')
+
       // 2. Önceki soruları sil
+      console.log('Deleting previous questions...')
       const { error: deleteError } = await supabase.from('questions').delete().eq('survey_id', currentSurveyId)
       if (deleteError) throw deleteError
 
       // 3. Yeni/Mevcut soruları kaydet
       if (questions.length > 0) {
+        console.log('Inserting', questions.length, 'questions...')
         const questionsToInsert = questions.map((q, idx) => ({
           survey_id: currentSurveyId,
           type: q.type,
@@ -170,12 +182,14 @@ export default function AdminSurveyBuilder() {
         }))
         const { error: insertError } = await supabase.from('questions').insert(questionsToInsert)
         if (insertError) throw insertError
+        console.log('Questions inserted successfully.')
       }
 
+      console.log('Save process completed successfully.')
       addNotification('Anket başarıyla kaydedildi.', 'success')
       navigate('/admin/anketler')
     } catch (e: any) {
-      console.error('Save error:', e)
+      console.error('Save error details:', e)
       addNotification('Kaydedilirken hata oluştu: ' + (e.message || 'Bilinmeyen hata'), 'error')
     } finally {
       setSaving(false)
