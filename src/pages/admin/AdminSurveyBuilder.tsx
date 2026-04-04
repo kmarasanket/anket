@@ -105,6 +105,13 @@ export default function AdminSurveyBuilder() {
 
   const handleSave = async () => {
     if (!tenant) return
+    
+    // Anket başlığı kontrolü
+    if (!surveyData.title.trim()) {
+      alert('Lütfen bir anket başlığı girin. Başlığı olmayan bir anket kaydedilemez.')
+      return
+    }
+
     setSaving(true)
     
     try {
