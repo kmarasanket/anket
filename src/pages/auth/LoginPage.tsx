@@ -95,8 +95,8 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-2 mb-8">
-            <h2 className="text-2xl font-display font-bold text-dark-50">Giriş yapın</h2>
-            <p className="text-dark-400">Kurumsal hesabınızla devam edin</p>
+            <h2 className="text-2xl font-display font-bold text-dark-50">Kurumsal Anket Yönetim Sistemi</h2>
+            <p className="text-dark-400">Kurumsal Hesap Girişi</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
