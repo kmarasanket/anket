@@ -69,10 +69,10 @@ export default function LoginPage() {
 
             {/* Özellikler */}
             {[
-              { icon: '🏢', text: '12 alt kurum, tam izolasyon' },
+              { icon: '🏢', text: 'Tüm Sağlık Tesisleri Merkezi Anket Yönetimi' },
               { icon: '📊', text: 'Gerçek zamanlı analiz ve raporlar' },
               { icon: '📱', text: 'Web ve mobil uyumlu, PWA desteği' },
-              { icon: '🔐', text: 'Veritabanı seviyesinde güvenlik' },
+              { icon: '🔒', text: 'Veritabanı seviyesinde güvenlik' },
             ].map((f) => (
               <div key={f.text} className="flex items-center gap-3 glass px-4 py-3">
                 <span className="text-xl">{f.icon}</span>
@@ -84,7 +84,7 @@ export default function LoginPage() {
           {/* Alt bilgi */}
           <div className="flex items-center gap-2 text-dark-500 text-sm">
             <Shield className="w-4 h-4" />
-            <span>Supabase RLS ile uçtan uca güvenlik</span>
+            <span>Güvenli Veri Altyapısı</span>
           </div>
         </div>
       </div>
