@@ -139,9 +139,15 @@ export default function AdminSurveyBuilder() {
       
       // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
-        console.log('Creating new survey...')
-        const { data, error: surveyError } = await withTimeout(
+        console.log('Creating new survey with client-side UUID...')
+        if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
+        
+        // ID'yi önceden kendimiz üretelim (RLS/Timeout sorunlarını aşmak için)
+        const newId = uuidv4()
+        
+        const { error: surveyError } = await withTimeout(
           supabase.from('surveys').insert({
+            id: newId, // Manuel ID (PostgreSQL gen_random_uuid() ile çakışmaz)
             tenant_id: tenant.id,
             created_by: user.id,
             title: surveyData.title.trim(),
@@ -151,19 +157,16 @@ export default function AdminSurveyBuilder() {
             welcome_message: surveyData.welcome_message,
             thank_you_message: surveyData.thank_you_message,
             settings: {}
-          }).select()
+          })
         )
         
         if (surveyError) {
           console.error('Survey Insert Error:', surveyError)
           throw surveyError
         }
-        if (!data || data.length === 0) {
-          throw new Error('Anket oluşturuldu ancak veri geri okunamadı (RLS Kısıtlaması olabilir).')
-        }
         
-        currentSurveyId = data[0].id
-        console.log('New survey created with ID:', currentSurveyId)
+        currentSurveyId = newId
+        console.log('New survey inserted successfully with ID:', currentSurveyId)
       } else {
         console.log('Updating existing survey:', currentSurveyId)
         const { error: updateError } = await withTimeout(
@@ -186,7 +189,7 @@ export default function AdminSurveyBuilder() {
       if (!currentSurveyId) throw new Error('Survey ID belirlenemedi.')
 
       // 2. Önceki soruları sil (Sync questions logic)
-      console.log('Syncing questions...')
+      console.log('Syncing questions for survey:', currentSurveyId)
       const { error: deleteError } = await withTimeout(
         supabase.from('questions').delete().eq('survey_id', currentSurveyId)
       )
