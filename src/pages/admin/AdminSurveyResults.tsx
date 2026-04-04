@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, Download, Activity, LayoutList } from 'lucide-react'
+import { ArrowLeft, Users, Download, Activity, LayoutList, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatDate } from '../../lib/utils'
 
@@ -9,6 +9,7 @@ export default function AdminSurveyResults() {
   const [survey, setSurvey] = useState<any>(null)
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedResponse, setSelectedResponse] = useState<any>(null)
 
   useEffect(() => {
     const loadResults = async () => {
@@ -17,7 +18,6 @@ export default function AdminSurveyResults() {
       setSurvey(s)
 
       // 2. Yanıtları tam liste yerine sayım ve basit listeleme olarak çek
-      // Gerçek bir sistemde bu sayfa için her soruya göre gruplama yapılarak chartlar çizilir.
       const { data: r } = await supabase.from('responses')
         .select('*, response_answers(*)')
         .eq('survey_id', id)
@@ -30,8 +30,47 @@ export default function AdminSurveyResults() {
     if (id) loadResults()
   }, [id])
 
+  // Flat list of questions for easy matching
+  const getQuestions = () => {
+    const qList: any[] = []
+    survey?.pages?.forEach((p: any) => {
+      p.questions?.forEach((q: any) => qList.push(q))
+    })
+    return qList
+  }
+
+  const downloadExcel = () => {
+    const questions = getQuestions()
+    let csv = "Tarih," + questions.map(q => `"${String(q.title || '').replace(/"/g, '""')}"`).join(',') + "\n"
+
+    responses.forEach(r => {
+      const row = [r.completed_at ? formatDate(r.completed_at) : '-']
+      questions.forEach(q => {
+        const answer = r.response_answers?.find((a: any) => a.question_id === q.id)
+        let ansStr = ''
+        if (answer?.answer_data?.value !== undefined) {
+          const val = answer.answer_data.value
+          ansStr = Array.isArray(val) ? val.join(', ') : String(val)
+        }
+        row.push(`"${ansStr.replace(/"/g, '""')}"`)
+      })
+      csv += row.join(',') + "\n"
+    })
+
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${survey.title}-Sonuclar.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   if (loading) return <div className="p-12 text-center text-dark-400">Sonuçlar Yükleniyor...</div>
   if (!survey) return <div className="p-12 text-center text-red-400">Anket bulunamadı.</div>
+
+  const allQuestions = getQuestions()
 
   return (
     <div className="animate-in space-y-6">
@@ -47,7 +86,7 @@ export default function AdminSurveyResults() {
             <p className="page-subtitle">Toplam {responses.length} kişi tamamladı</p>
           </div>
         </div>
-        <button className="btn-md btn-secondary gap-2 hidden md:flex">
+        <button onClick={downloadExcel} className="btn-md btn-secondary gap-2 hidden md:flex">
           <Download className="w-4 h-4" /> Excel Olarak İndir
         </button>
       </div>
@@ -108,7 +147,7 @@ export default function AdminSurveyResults() {
                         {r.completed_at ? formatDate(r.completed_at) : '-'}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="text-primary-400 hover:text-primary-300 font-medium">
+                        <button onClick={() => setSelectedResponse(r)} className="text-primary-400 hover:text-primary-300 font-medium">
                           İncele
                         </button>
                       </td>
@@ -120,6 +159,41 @@ export default function AdminSurveyResults() {
           )}
         </div>
       </div>
+
+      {/* Sonuç İnceleme Modalı */}
+      {selectedResponse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-2xl rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-6 border-b border-dark-800">
+              <div>
+                <h3 className="text-xl font-bold text-dark-50">Katılımcı Detayları</h3>
+                <p className="text-dark-400 text-sm mt-1">{formatDate(selectedResponse.completed_at)}</p>
+              </div>
+              <button onClick={() => setSelectedResponse(null)} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+              {allQuestions.map((q: any, i: number) => {
+                const answer = selectedResponse.response_answers?.find((a: any) => a.question_id === q.id)
+                let ansStr = '-'
+                if (answer?.answer_data?.value !== undefined && answer.answer_data.value !== '') {
+                  const val = answer.answer_data.value
+                  ansStr = Array.isArray(val) ? val.join(', ') : String(val)
+                }
+
+                return (
+                  <div key={q.id} className="p-4 bg-dark-800/50 rounded-xl border border-dark-800">
+                    <p className="text-sm font-medium text-dark-300 mb-2">{i+1}. {q.title}</p>
+                    <p className="text-dark-100 font-medium whitespace-pre-wrap">{ansStr}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
