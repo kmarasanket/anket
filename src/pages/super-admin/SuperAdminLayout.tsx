@@ -68,7 +68,13 @@ export default function SuperAdminLayout() {
               <p className="text-[10px] text-dark-500">Süper Admin</p>
             </div>
           </div>
-          <button onClick={logout} className="sidebar-item w-full text-red-400 hover:text-red-300 hover:bg-red-500/10">
+          <button 
+            onClick={async () => {
+              await logout()
+              window.location.href = '/login'
+            }} 
+            className="sidebar-item w-full text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
             <LogOut className="w-4 h-4" />
             <span>Çıkış Yap</span>
           </button>

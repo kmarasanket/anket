@@ -65,8 +65,15 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
-        await supabase.auth.signOut()
-        set({ user: null, profile: null, tenant: null })
+        try {
+          await supabase.auth.signOut()
+        } catch (err) {
+          console.error('Logout error:', err)
+        } finally {
+          set({ user: null, profile: null, tenant: null })
+          // localStorage temizliği (persist middleware için)
+          localStorage.removeItem('auth-store')
+        }
       },
 
       refreshProfile: async () => {

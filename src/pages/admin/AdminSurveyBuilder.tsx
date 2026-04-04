@@ -121,7 +121,7 @@ export default function AdminSurveyBuilder() {
       if (!currentSurveyId) {
         const { data: newSurvey, error: surveyError } = await supabase.from('surveys').insert({
           tenant_id: tenant.id,
-          title: surveyData.title,
+          title: surveyData.title.trim(), // Boşlukları temizle
           description: surveyData.description,
           slug: slugify(surveyData.title) + '-' + Math.random().toString(36).substr(2, 5),
           status: surveyData.status,
@@ -132,17 +132,20 @@ export default function AdminSurveyBuilder() {
         if (surveyError) throw surveyError
         currentSurveyId = newSurvey.id
       } else {
-        await supabase.from('surveys').update({
-          title: surveyData.title,
+        const { error: updateError } = await supabase.from('surveys').update({
+          title: surveyData.title.trim(),
           description: surveyData.description,
           status: surveyData.status,
           welcome_message: surveyData.welcome_message,
           thank_you_message: surveyData.thank_you_message,
         }).eq('id', currentSurveyId)
+        
+        if (updateError) throw updateError
       }
 
-      // 2. Önceki soruları sil (basit yöntem)
-      await supabase.from('questions').delete().eq('survey_id', currentSurveyId)
+      // 2. Önceki soruları sil
+      const { error: deleteError } = await supabase.from('questions').delete().eq('survey_id', currentSurveyId)
+      if (deleteError) throw deleteError
 
       // 3. Yeni/Mevcut soruları kaydet
       if (questions.length > 0) {
@@ -155,12 +158,14 @@ export default function AdminSurveyBuilder() {
           is_required: q.is_required,
           order_index: idx,
         }))
-        await supabase.from('questions').insert(questionsToInsert)
+        const { error: insertError } = await supabase.from('questions').insert(questionsToInsert)
+        if (insertError) throw insertError
       }
 
       navigate('/admin/anketler')
-    } catch (e) {
-      alert('Kaydedilirken hata oluştu')
+    } catch (e: any) {
+      console.error('Save error:', e)
+      alert('Kaydedilirken hata oluştu: ' + (e.message || 'Bilinmeyen hata'))
     } finally {
       setSaving(false)
     }
