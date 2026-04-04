@@ -3,22 +3,38 @@ import { Link } from 'react-router-dom'
 import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatDate } from '../../lib/utils'
+import { useAuthStore } from '../../stores/authStore'
 import type { Survey } from '../../lib/database.types'
 
 export default function AdminSurveysPage() {
+  const { tenant } = useAuthStore()
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const fetchSurveys = async () => {
-    // Sadece giriş yapan kurumun (tenant) anketlerini RLS ile getirir
-    const { data } = await supabase.from('surveys').select('*').order('created_at', { ascending: false })
+    if (!tenant?.id) return
+    
+    // Explicit tenant_id filter ensures better performance and avoids RLS hiccups 
+    // where session context might be slightly delayed in Supabase PostgREST edge nodes.
+    const { data, error } = await supabase
+        .from('surveys')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .order('created_at', { ascending: false })
+    
+    if (error) {
+        console.error("Anketler getirilirken hata:", error)
+    }
+    
     setSurveys(data || [])
     setLoading(false)
   }
 
-  useEffect(() => { fetchSurveys() }, [])
+  useEffect(() => { 
+    if (tenant?.id) fetchSurveys() 
+  }, [tenant?.id])
 
   const filtered = surveys.filter(s => 
     s.title.toLowerCase().includes(search.toLowerCase())
