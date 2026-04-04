@@ -4,6 +4,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type QuestionType =
+  | 'section'     // Bölüm Başlığı
   | 'radio'       // Tek seçimli
   | 'checkbox'    // Çok seçimli
   | 'text'        // Kısa metin

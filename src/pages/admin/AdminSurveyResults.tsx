@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Download, Activity, LayoutList, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { formatDate } from '../../lib/utils'
+import { formatDateTime } from '../../lib/utils'
 
 export default function AdminSurveyResults() {
   const { id } = useParams()
@@ -41,15 +41,18 @@ export default function AdminSurveyResults() {
 
   const downloadExcel = () => {
     const questions = getQuestions()
-    let csv = "Tarih," + questions.map(q => `"${String(q.title || '').replace(/"/g, '""')}"`).join(',') + "\n"
+    let csv = "Tarih/Saat,Dönem (Ay/Yıl)," + questions.map(q => `"${String(q.title || '').replace(/"/g, '""')}"`).join(',') + "\n"
 
     responses.forEach(r => {
-      const row = [r.completed_at ? formatDate(r.completed_at) : '-']
+      const dateStr = r.completed_at ? formatDateTime(r.completed_at) : '-'
+      const monthYear = r.completed_at ? new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' }).format(new Date(r.completed_at)) : '-'
+      
+      const row = [dateStr, monthYear]
       questions.forEach(q => {
         const answer = r.response_answers?.find((a: any) => a.question_id === q.id)
         let ansStr = ''
-        if (answer?.answer_data?.value !== undefined) {
-          const val = answer.answer_data.value
+        if (answer?.answer?.value !== undefined) {
+          const val = answer.answer.value
           ansStr = Array.isArray(val) ? val.join(', ') : String(val)
         }
         row.push(`"${ansStr.replace(/"/g, '""')}"`)
@@ -133,7 +136,7 @@ export default function AdminSurveyResults() {
                 <thead className="bg-dark-900 border-b border-dark-800 text-dark-400">
                   <tr>
                     <th className="px-6 py-4 font-medium">Katılım Formatı</th>
-                    <th className="px-6 py-4 font-medium">Tarih</th>
+                    <th className="px-6 py-4 font-medium">Tarih / Saat</th>
                     <th className="px-6 py-4 font-medium text-right">Detaylar</th>
                   </tr>
                 </thead>
@@ -144,7 +147,7 @@ export default function AdminSurveyResults() {
                         Katılımcı #{responses.length - i}
                       </td>
                       <td className="px-6 py-4 text-dark-400">
-                        {r.completed_at ? formatDate(r.completed_at) : '-'}
+                        {r.completed_at ? formatDateTime(r.completed_at) : '-'}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button onClick={() => setSelectedResponse(r)} className="text-primary-400 hover:text-primary-300 font-medium">
@@ -167,7 +170,7 @@ export default function AdminSurveyResults() {
             <div className="flex items-center justify-between p-6 border-b border-dark-800">
               <div>
                 <h3 className="text-xl font-bold text-dark-50">Katılımcı Detayları</h3>
-                <p className="text-dark-400 text-sm mt-1">{formatDate(selectedResponse.completed_at)}</p>
+                <p className="text-dark-400 text-sm mt-1">{formatDateTime(selectedResponse.completed_at)}</p>
               </div>
               <button onClick={() => setSelectedResponse(null)} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
                 <X className="w-5 h-5" />

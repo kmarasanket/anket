@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { 
-  Save, ArrowLeft, Plus, Settings2, Trash2, GripVertical, 
+  Save, ArrowLeft, Plus, Trash2, 
   AlignLeft, CheckSquare, CircleDot, Star, Calendar, Baseline
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -12,6 +12,7 @@ import type { QuestionType } from '../../lib/database.types'
 
 // Tüm soru tiplerinin listesi
 const QUESTION_TYPES: { type: QuestionType; label: string; icon: any }[] = [
+  { type: 'section', label: 'Bölüm Başlığı', icon: Baseline },
   { type: 'text', label: 'Kısa Metin', icon: Baseline },
   { type: 'textarea', label: 'Uzun Metin (Açıklama)', icon: AlignLeft },
   { type: 'radio', label: 'Tek Seçimli', icon: CircleDot },
@@ -71,6 +72,21 @@ export default function AdminSurveyBuilder() {
       options: ['Seçenek 1'], // Sadece radio/checkbox için gerekli
       order_index: questions.length,
       _isNew: true // db tablosunda olmayan alan, sonradan filtrelenir
+    }
+    setQuestions([...questions, newQ])
+  }
+
+  const addSection = () => {
+    const newQ = {
+      id: uuidv4(),
+      survey_id: id || '',
+      type: 'section' as QuestionType,
+      title: 'Yeni Bölüm',
+      description: 'Bölüm alt başlığı (isteğe bağlı)',
+      is_required: false,
+      options: null,
+      order_index: questions.length,
+      _isNew: true
     }
     setQuestions([...questions, newQ])
   }
@@ -191,20 +207,39 @@ export default function AdminSurveyBuilder() {
       {/* Sorular */}
       <div className="space-y-6">
         {questions.map((q, qIndex) => (
-          <div key={q.id} className="card p-6 border-l-4 border-l-blue-500 transition-all focus-within:shadow-glow-sm">
+          <div key={q.id} className={`card p-6 transition-all focus-within:shadow-glow-sm ${
+            q.type === 'section' ? 'border-l-8 border-l-purple-500 bg-purple-500/5' : 'border-l-4 border-l-blue-500'
+          }`}>
             
             {/* Soru Üst Kısım: Başlık ve Tür */}
             <div className="flex flex-col md:flex-row gap-4 mb-4">
-              <input 
-                value={q.title}
-                onChange={e => updateQuestion(qIndex, { title: e.target.value })}
-                className="input text-lg font-medium bg-dark-950 border-dark-800 flex-1"
-                placeholder="Soru metni..."
-              />
+              {q.type === 'section' ? (
+                <div className="flex-1 space-y-2">
+                  <input 
+                    value={q.title}
+                    onChange={e => updateQuestion(qIndex, { title: e.target.value })}
+                    className="input text-2xl font-display font-bold bg-dark-900 border-none border-b border-dark-700 rounded-none px-0 text-purple-400 focus:border-purple-500 w-full"
+                    placeholder="Bölüm Başlığı..."
+                  />
+                  <input 
+                    value={q.description || ''}
+                    onChange={e => updateQuestion(qIndex, { description: e.target.value })}
+                    className="input text-sm text-dark-300 bg-transparent border-none px-0 w-full focus:ring-0"
+                    placeholder="Bölüm açıklaması (isteğe bağlı)..."
+                  />
+                </div>
+              ) : (
+                <input 
+                  value={q.title}
+                  onChange={e => updateQuestion(qIndex, { title: e.target.value })}
+                  className="input text-lg font-medium bg-dark-950 border-dark-800 flex-1"
+                  placeholder="Soru metni..."
+                />
+              )}
               <select 
                 value={q.type}
                 onChange={e => updateQuestion(qIndex, { type: e.target.value })}
-                className="input w-full md:w-48 bg-dark-950 border-dark-800"
+                className="input w-full md:w-48 bg-dark-950 border-dark-800 h-auto"
               >
                 {QUESTION_TYPES.map(qt => (
                   <option key={qt.type} value={qt.type}>{qt.label}</option>
@@ -274,9 +309,12 @@ export default function AdminSurveyBuilder() {
         ))}
       </div>
 
-      <div className="flex justify-center mt-8">
-        <button onClick={addQuestion} className="btn-lg btn-secondary rounded-full px-8 shadow-card flex items-center gap-2 hover:border-primary-500 hover:text-primary-400">
+      <div className="flex justify-center mt-8 gap-4">
+        <button onClick={addQuestion} className="btn-lg btn-secondary rounded-full px-6 shadow-card flex items-center gap-2 hover:border-primary-500 hover:text-primary-400">
           <Plus className="w-5 h-5" /> Soru Ekle
+        </button>
+        <button onClick={addSection} className="btn-lg btn-secondary rounded-full px-6 shadow-card flex items-center gap-2 hover:border-purple-500 hover:text-purple-400">
+          <AlignLeft className="w-5 h-5" /> Bölüm Ekle
         </button>
       </div>
 
