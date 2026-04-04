@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatDate, slugify } from '../../lib/utils'
+import { useNotificationStore } from '../../stores/notificationStore'
 
 export default function SASurveysPage() {
   const [surveys, setSurveys] = useState<any[]>([])
@@ -18,17 +19,23 @@ export default function SASurveysPage() {
   const [selectedSurvey, setSelectedSurvey] = useState<any>(null)
   const [targetTenantId, setTargetTenantId] = useState('')
   const [cloning, setCloning] = useState(false)
+  const { addNotification } = useNotificationStore()
 
   const fetchData = async () => {
     setLoading(true)
-    const [surveysRes, tenantsRes] = await Promise.all([
-      supabase.from('surveys').select('*, tenants(name)').order('created_at', { ascending: false }),
-      supabase.from('tenants').select('id, name').eq('is_active', true).order('name')
-    ])
-    
-    setSurveys(surveysRes.data || [])
-    setTenants(tenantsRes.data || [])
-    setLoading(false)
+    try {
+      const [surveysRes, tenantsRes] = await Promise.all([
+        supabase.from('surveys').select('*, tenants(name)').order('created_at', { ascending: false }),
+        supabase.from('tenants').select('id, name').eq('is_active', true).order('name')
+      ])
+      
+      setSurveys(surveysRes.data || [])
+      setTenants(tenantsRes.data || [])
+    } catch (err: any) {
+      addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchData() }, [])
@@ -82,16 +89,16 @@ export default function SASurveysPage() {
           is_required: q.is_required
         }))
         
-        const { error: questionsError } = await supabase .from('questions').insert(questionsToInsert)
+        const { error: questionsError } = await supabase.from('questions').insert(questionsToInsert)
         if (questionsError) throw questionsError
       }
 
-      alert('Anket başarıyla hedef kuruma kopyalandı!')
+      addNotification('Anket başarıyla hedef kuruma kopyalandı!', 'success')
       setIsCloneModalOpen(false)
       fetchData()
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      alert('Kopyalama sırasında bir hata oluştu.')
+      addNotification('Kopyalama sırasında bir hata oluştu: ' + (err.message || ''), 'error')
     } finally {
       setCloning(false)
     }
@@ -99,8 +106,14 @@ export default function SASurveysPage() {
 
   const handleDelete = async (id: string, title: string) => {
     if (confirm(`'${title}' anketini MERKEZİ olarak silmek üzeresiniz. Emin misiniz?`)) {
-      await supabase.from('surveys').delete().eq('id', id)
-      fetchData()
+      try {
+        const { error } = await supabase.from('surveys').delete().eq('id', id)
+        if (error) throw error
+        addNotification('Anket kalıcı olarak silindi.', 'success')
+        fetchData()
+      } catch (err: any) {
+        addNotification('Anket silinirken bir hata oluştu.', 'error')
+      }
     }
   }
 

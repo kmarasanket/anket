@@ -8,6 +8,7 @@ import SuperAdminLayout from './pages/super-admin/SuperAdminLayout'
 import AdminLayout from './pages/admin/AdminLayout'
 import PublicSurveyPage from './pages/survey/PublicSurveyPage'
 import ThankYouPage from './pages/survey/ThankYouPage'
+import NotificationContainer from './components/ui/NotificationContainer'
 import NotFoundPage from './pages/NotFoundPage'
 
 // Guards
@@ -33,6 +34,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <NotificationContainer />
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />

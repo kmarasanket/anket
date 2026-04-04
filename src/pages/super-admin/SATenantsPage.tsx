@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, Edit2, Trash2, ToggleLeft, ToggleRight, Building2 } from 'lucide-react'
+import { Plus, Search, Edit2, ToggleLeft, ToggleRight, Building2, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatDate, slugify } from '../../lib/utils'
+import { useNotificationStore } from '../../stores/notificationStore'
 import type { Tenant } from '../../lib/database.types'
 
 export default function SATenantsPage() {
@@ -12,11 +13,18 @@ export default function SATenantsPage() {
   const [editItem, setEditItem] = useState<Tenant | null>(null)
   const [formData, setFormData] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
+  const { addNotification } = useNotificationStore()
 
   const fetchTenants = async () => {
-    const { data } = await supabase.from('tenants').select('*').order('created_at', { ascending: false })
-    setTenants(data || [])
-    setLoading(false)
+    try {
+      const { data, error } = await supabase.from('tenants').select('*').order('created_at', { ascending: false })
+      if (error) throw error
+      setTenants(data || [])
+    } catch (err: any) {
+      addNotification('Kurumlar yüklenirken bir hata oluştu.', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchTenants() }, [])
@@ -28,30 +36,45 @@ export default function SATenantsPage() {
   const handleSave = async () => {
     if (!formData.name.trim()) return
     setSaving(true)
-    if (editItem) {
-      await supabase.from('tenants').update({
-        name: formData.name,
-        description: formData.description,
-      }).eq('id', editItem.id)
-    } else {
-      await supabase.from('tenants').insert({
-        name: formData.name,
-        description: formData.description,
-        slug: slugify(formData.name),
-        is_active: true,
-        settings: {},
-      })
+    try {
+      if (editItem) {
+        const { error } = await supabase.from('tenants').update({
+          name: formData.name.trim(),
+          description: formData.description,
+        }).eq('id', editItem.id)
+        if (error) throw error
+        addNotification('Kurum başarıyla güncellendi.', 'success')
+      } else {
+        const { error } = await supabase.from('tenants').insert({
+          name: formData.name.trim(),
+          description: formData.description,
+          slug: slugify(formData.name),
+          is_active: true,
+          settings: {},
+        })
+        if (error) throw error
+        addNotification('Yeni kurum başarıyla eklendi.', 'success')
+      }
+      setShowForm(false)
+      setEditItem(null)
+      setFormData({ name: '', description: '' })
+      fetchTenants()
+    } catch (err: any) {
+      addNotification('Kurum kaydedilirken bir hata oluştu: ' + (err.message || ''), 'error')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setShowForm(false)
-    setEditItem(null)
-    setFormData({ name: '', description: '' })
-    fetchTenants()
   }
 
   const toggleActive = async (tenant: Tenant) => {
-    await supabase.from('tenants').update({ is_active: !tenant.is_active }).eq('id', tenant.id)
-    fetchTenants()
+    try {
+      const { error } = await supabase.from('tenants').update({ is_active: !tenant.is_active }).eq('id', tenant.id)
+      if (error) throw error
+      addNotification(`Kurum ${!tenant.is_active ? 'aktif' : 'pasif'} duruma getirildi.`, 'info')
+      fetchTenants()
+    } catch (err: any) {
+      addNotification('Durum değiştirilirken bir hata oluştu.', 'error')
+    }
   }
 
   const openEdit = (tenant: Tenant) => {
@@ -120,7 +143,7 @@ export default function SATenantsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="card p-12 text-center">
-          <Building2 className="w-10 h-10 text-dark-600 mx-auto mb-3" />
+          <Users className="w-10 h-10 text-dark-600 mx-auto mb-3" />
           <p className="text-dark-400">Kurum bulunamadı</p>
         </div>
       ) : (

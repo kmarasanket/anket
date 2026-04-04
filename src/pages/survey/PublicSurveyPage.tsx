@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Building2, ArrowRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { cookies, generateSessionToken, hashIP } from '../../lib/utils'
+import { useNotificationStore } from '../../stores/notificationStore'
 
 export default function PublicSurveyPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const { addNotification } = useNotificationStore()
   
   const [survey, setSurvey] = useState<any>(null)
   const [tenant, setTenant] = useState<any>(null)
@@ -22,36 +24,40 @@ export default function PublicSurveyPage() {
 
   useEffect(() => {
     const loadSurvey = async () => {
-      // 1. Slug ile anketi bul
-      const { data: s } = await supabase.from('surveys').select('*').eq('slug', slug).single()
-      
-      if (!s) {
+      setLoading(true)
+      try {
+        const { data: s, error: sErr } = await supabase.from('surveys').select('*').eq('slug', slug).single()
+        
+        if (sErr || !s) {
+          setLoading(false)
+          return
+        }
+
+        // Aktiflik kontrolü
+        if (s.status !== 'active') {
+          setSurvey({ ...s, is_closed: true })
+          setLoading(false)
+          return
+        }
+
+        setSurvey(s)
+
+        // 2. Kurum bilgilerini al
+        const { data: t } = await supabase.from('tenants').select('name, logo_url').eq('id', s.tenant_id).single()
+        setTenant(t)
+
+        // 3. Soruları al
+        const { data: q } = await supabase.from('questions').select('*').eq('survey_id', s.id).order('order_index')
+        setQuestions(q || [])
+      } catch (err: any) {
+        addNotification('Anket yüklenirken bir hata oluştu.', 'error')
+      } finally {
         setLoading(false)
-        return
       }
-
-      // Aktiflik kontrolü
-      if (s.status !== 'active') {
-        setSurvey({ ...s, is_closed: true })
-        setLoading(false)
-        return
-      }
-
-      setSurvey(s)
-
-      // 2. Kurum bilgilerini al
-      const { data: t } = await supabase.from('tenants').select('name, logo_url').eq('id', s.tenant_id).single()
-      setTenant(t)
-
-      // 3. Soruları al
-      const { data: q } = await supabase.from('questions').select('*').eq('survey_id', s.id).order('order_index')
-      setQuestions(q || [])
-      
-      setLoading(false)
     }
 
     if (slug) loadSurvey()
-  }, [slug])
+  }, [slug, addNotification])
 
   // Split questions into pages based on 'section' type
   const getPages = () => {
@@ -164,11 +170,12 @@ export default function PublicSurveyPage() {
         await supabase.from('response_answers').insert(answersToInsert)
       }
 
+      addNotification('Anket başarıyla gönderildi.', 'success')
       navigate(`/s/${slug}/tesekkurler`)
 
     } catch (err: any) {
       console.error(err)
-      setErrorMsg('Yanıtınız kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.')
+      addNotification('Yanıtınız kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.', 'error')
     } finally {
       setSubmitting(false)
     }

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
+import { useNotificationStore } from './notificationStore'
 import type { Profile, Tenant } from '../lib/database.types'
 
 interface AuthState {
@@ -34,6 +35,8 @@ export const useAuthStore = create<AuthState>()(
             set({ user: { id: session.user.id, email: session.user.email! } })
             await get().refreshProfile()
           }
+        } catch (err) {
+          useNotificationStore.getState().addNotification('Oturum kurtarılamadı.', 'error')
         } finally {
           set({ loading: false, initialized: true })
         }
@@ -53,12 +56,17 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: true })
         try {
           const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-          if (error) return { error: error.message }
+          if (error) throw error
+          
           if (data.user) {
             set({ user: { id: data.user.id, email: data.user.email! } })
             await get().refreshProfile()
           }
+          useNotificationStore.getState().addNotification('Giriş başarılı. Hoş geldiniz!', 'success')
           return { error: null }
+        } catch (err: any) {
+          useNotificationStore.getState().addNotification('Giriş başarısız: ' + (err.message || 'Bilgilerinizi kontrol edin'), 'error')
+          return { error: err.message }
         } finally {
           set({ loading: false })
         }

@@ -8,6 +8,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { slugify } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 import type { QuestionType } from '../../lib/database.types'
 
 // Tüm soru tiplerinin listesi
@@ -25,6 +26,7 @@ export default function AdminSurveyBuilder() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { tenant } = useAuthStore()
+  const { addNotification } = useNotificationStore()
   
   const [loading, setLoading] = useState(!!id)
   const [saving, setSaving] = useState(false)
@@ -44,19 +46,27 @@ export default function AdminSurveyBuilder() {
   useEffect(() => {
     if (!id) return
     const loadSurvey = async () => {
-      const { data: survey } = await supabase.from('surveys').select('*').eq('id', id).single()
-      if (survey) {
-        setSurveyData({
-          title: survey.title,
-          description: survey.description || '',
-          status: survey.status,
-          welcome_message: survey.welcome_message || '',
-          thank_you_message: survey.thank_you_message || '',
-        })
-        const { data: qData } = await supabase.from('questions').select('*').eq('survey_id', id).order('order_index')
-        setQuestions(qData || [])
+      setLoading(true)
+      try {
+        const { data: survey, error } = await supabase.from('surveys').select('*').eq('id', id).single()
+        if (error) throw error
+        if (survey) {
+          setSurveyData({
+            title: survey.title,
+            description: survey.description || '',
+            status: survey.status,
+            welcome_message: survey.welcome_message || '',
+            thank_you_message: survey.thank_you_message || '',
+          })
+          const { data: qData, error: qError } = await supabase.from('questions').select('*').eq('survey_id', id).order('order_index')
+          if (qError) throw qError
+          setQuestions(qData || [])
+        }
+      } catch (err: any) {
+        addNotification('Anket yüklenirken bir hata oluştu: ' + (err.message || ''), 'error')
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     loadSurvey()
   }, [id])
@@ -108,7 +118,7 @@ export default function AdminSurveyBuilder() {
     
     // Anket başlığı kontrolü
     if (!surveyData.title.trim()) {
-      alert('Lütfen bir anket başlığı girin. Başlığı olmayan bir anket kaydedilemez.')
+      addNotification('Lütfen bir anket başlığı girin. Başlığı olmayan bir anket kaydedilemez.', 'warning')
       return
     }
 
@@ -162,10 +172,11 @@ export default function AdminSurveyBuilder() {
         if (insertError) throw insertError
       }
 
+      addNotification('Anket başarıyla kaydedildi.', 'success')
       navigate('/admin/anketler')
     } catch (e: any) {
       console.error('Save error:', e)
-      alert('Kaydedilirken hata oluştu: ' + (e.message || 'Bilinmeyen hata'))
+      addNotification('Kaydedilirken hata oluştu: ' + (e.message || 'Bilinmeyen hata'), 'error')
     } finally {
       setSaving(false)
     }

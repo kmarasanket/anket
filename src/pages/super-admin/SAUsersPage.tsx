@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, Edit2, ToggleLeft, ToggleRight, Users } from 'lucide-react'
+import { Plus, Search, ToggleLeft, ToggleRight, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useNotificationStore } from '../../stores/notificationStore'
 import type { Profile, Tenant } from '../../lib/database.types'
 
 export default function SAUsersPage() {
@@ -11,16 +12,23 @@ export default function SAUsersPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', password: '', password_confirm: '' })
+  const { addNotification } = useNotificationStore()
 
   const fetchData = async () => {
-    const [profilesRes, tenantsRes] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('tenants').select('*').eq('is_active', true),
-    ])
-    const tenantMap = new Map((tenantsRes.data || []).map(t => [t.id, t.name]))
-    setUsers((profilesRes.data || []).map(p => ({ ...p, tenant_name: p.tenant_id ? tenantMap.get(p.tenant_id) : 'Ana Sistem' })))
-    setTenants(tenantsRes.data || [])
-    setLoading(false)
+    try {
+      const [profilesRes, tenantsRes] = await Promise.all([
+        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('tenants').select('*').eq('is_active', true),
+      ])
+      
+      const tenantMap = new Map((tenantsRes.data || []).map(t => [t.id, t.name]))
+      setUsers((profilesRes.data || []).map(p => ({ ...p, tenant_name: p.tenant_id ? tenantMap.get(p.tenant_id) : 'Ana Sistem' })))
+      setTenants(tenantsRes.data || [])
+    } catch (err: any) {
+      addNotification('Veriler yüklenirken bir hata oluştu.', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchData() }, [])
@@ -32,7 +40,7 @@ export default function SAUsersPage() {
   const handleCreate = async () => {
     if (!formData.email || !formData.full_name || !formData.password) return
     if (formData.password !== formData.password_confirm) {
-        alert("Girdiğiniz şifreler eşleşmiyor, lütfen kontrol ediniz.")
+        addNotification("Girdiğiniz şifreler eşleşmiyor, lütfen kontrol ediniz.", "warning")
         return
     }
 
@@ -61,21 +69,31 @@ export default function SAUsersPage() {
         })
         if (profileError) throw profileError
       }
+      addNotification('Kullanıcı başarıyla oluşturuldu.', 'success')
+      setShowForm(false)
+      setFormData({ email: '', full_name: '', role: 'admin', tenant_id: '', password: '', password_confirm: '' })
+      fetchData()
     } catch (err: any) {
-      if (err.message.includes("already registered")) {
-        alert("Kullanıcı daha önceden sisteme (auth) eklenmiş kalmış! Lütfen Supabase -> Authentication -> Users sekmesinden o kullanıcıyı (necipfazilsh) bulup tamamen silin ve buradan tekrar ekleyin.")
+      console.error('User creation error:', err)
+      if (err.message?.includes("already registered")) {
+        addNotification("Kullanıcı daha önceden sisteme (auth) eklenmiş! Lütfen merkezi Authentication sekmesinden o kullanıcıyı silin.", "error", 8000)
       } else {
-        alert("Kullanıcı eklenemedi: " + err.message)
+        addNotification("Kullanıcı eklenemedi: " + (err.message || 'Bilinmeyen hata'), 'error')
       }
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setShowForm(false)
-    fetchData()
   }
 
   const toggleActive = async (user: Profile) => {
-    await supabase.from('profiles').update({ is_active: !user.is_active }).eq('id', user.id)
-    fetchData()
+    try {
+      const { error } = await supabase.from('profiles').update({ is_active: !user.is_active }).eq('id', user.id)
+      if (error) throw error
+      addNotification(`Kullanıcı ${!user.is_active ? 'aktif' : 'pasif'} duruma getirildi.`, 'info')
+      fetchData()
+    } catch (err: any) {
+      addNotification('Durum değiştirilirken bir hata oluştu.', 'error')
+    }
   }
 
   return (

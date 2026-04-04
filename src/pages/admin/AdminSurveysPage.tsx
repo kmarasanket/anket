@@ -4,6 +4,7 @@ import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe } fro
 import { supabase } from '../../lib/supabase'
 import { formatDate } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 import type { Survey } from '../../lib/database.types'
 
 export default function AdminSurveysPage() {
@@ -12,24 +13,25 @@ export default function AdminSurveysPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const { addNotification } = useNotificationStore()
 
   const fetchSurveys = async () => {
     if (!tenant?.id) return
-    
-    // Explicit tenant_id filter ensures better performance and avoids RLS hiccups 
-    // where session context might be slightly delayed in Supabase PostgREST edge nodes.
-    const { data, error } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false })
-    
-    if (error) {
-        console.error("Anketler getirilirken hata:", error)
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+          .from('surveys')
+          .select('*')
+          .eq('tenant_id', tenant.id)
+          .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      setSurveys(data || [])
+    } catch (err: any) {
+      addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
+    } finally {
+      setLoading(false)
     }
-    
-    setSurveys(data || [])
-    setLoading(false)
   }
 
   useEffect(() => { 
@@ -44,13 +46,20 @@ export default function AdminSurveysPage() {
     const url = `${window.location.origin}/s/${slug}`
     navigator.clipboard.writeText(url)
     setCopiedId(id)
+    addNotification('Anket linki kopyalandı.', 'success')
     setTimeout(() => setCopiedId(null), 2000)
   }
 
   const handleDelete = async (id: string, title: string) => {
     if (confirm(`'${title}' anketini silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm yanıtlar silinir.`)) {
-      await supabase.from('surveys').delete().eq('id', id)
-      fetchSurveys()
+      try {
+        const { error } = await supabase.from('surveys').delete().eq('id', id)
+        if (error) throw error
+        addNotification('Anket silindi.', 'success')
+        fetchSurveys()
+      } catch (err: any) {
+        addNotification('Anket silinirken bir hata oluştu.', 'error')
+      }
     }
   }
 
