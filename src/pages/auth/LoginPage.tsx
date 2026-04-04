@@ -48,11 +48,8 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-secondary-500 rounded-xl flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xl font-display font-bold text-white">AnketPlatform</span>
+          <div className="flex items-center">
+            <img src="/kmaraslogo.png" alt="Kurum Logosu" className="h-16 w-auto object-contain drop-shadow-lg" />
           </div>
 
           {/* Orta içerik */}
@@ -93,11 +90,8 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md animate-in">
           {/* Mobil logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-secondary-500 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-display font-bold text-white">AnketPlatform</span>
+          <div className="flex items-center justify-center mb-8 lg:hidden">
+            <img src="/kmaraslogo.png" alt="Kurum Logosu" className="h-16 w-auto object-contain" />
           </div>
 
           <div className="space-y-2 mb-8">
