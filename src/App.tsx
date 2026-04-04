@@ -20,7 +20,7 @@ function App() {
     initialize()
   }, [])
 
-  if (!initialized || loading) {
+  if (!initialized) {
     return (
       <div className="min-h-screen bg-dark-950 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
