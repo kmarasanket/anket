@@ -41,7 +41,7 @@ export default function SAUsersPage() {
       )
 
       const { data: authData, error: authError } = await tempSupabase.auth.signUp({
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
       })
       if (authError) throw authError
