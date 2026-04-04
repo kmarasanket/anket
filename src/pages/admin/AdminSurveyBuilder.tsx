@@ -135,6 +135,9 @@ export default function AdminSurveyBuilder() {
 
     try {
       console.log('Save process started...')
+      console.log('Title length:', surveyData.title.length)
+      console.log('Description length:', surveyData.description.length)
+      
       let currentSurveyId = id
       
       // 1. Anketi Kaydet/Güncelle
@@ -142,17 +145,22 @@ export default function AdminSurveyBuilder() {
         console.log('Creating new survey with client-side UUID...')
         if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
         
-        // ID'yi önceden kendimiz üretelim (RLS/Timeout sorunlarını aşmak için)
         const newId = uuidv4()
         
+        // Slug'ı 40 karaktere sabitleyelim (Index performans ve uzun metin sorunlarını aşmak için)
+        const baseSlug = slugify(surveyData.title).substring(0, 40)
+        const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
+        
+        console.log('Generated Slug:', finalSlug)
+
         const { error: surveyError } = await withTimeout(
           supabase.from('surveys').insert({
-            id: newId, // Manuel ID (PostgreSQL gen_random_uuid() ile çakışmaz)
+            id: newId,
             tenant_id: tenant.id,
             created_by: user.id,
             title: surveyData.title.trim(),
             description: surveyData.description,
-            slug: slugify(surveyData.title) + '-' + Math.random().toString(36).substr(2, 5),
+            slug: finalSlug,
             status: surveyData.status,
             welcome_message: surveyData.welcome_message,
             thank_you_message: surveyData.thank_you_message,
@@ -161,7 +169,7 @@ export default function AdminSurveyBuilder() {
         )
         
         if (surveyError) {
-          console.error('Survey Insert Error:', surveyError)
+          console.error('Survey Insert Error Detail:', surveyError)
           throw surveyError
         }
         
@@ -181,7 +189,7 @@ export default function AdminSurveyBuilder() {
         )
         
         if (updateError) {
-          console.error('Survey Update Error:', updateError)
+          console.error('Survey Update Error Detail:', updateError)
           throw updateError
         }
       }
@@ -194,7 +202,7 @@ export default function AdminSurveyBuilder() {
         supabase.from('questions').delete().eq('survey_id', currentSurveyId)
       )
       if (deleteError) {
-        console.error('Questions Delete Error:', deleteError)
+        console.error('Questions Delete Error Detail:', deleteError)
         throw deleteError
       }
 
