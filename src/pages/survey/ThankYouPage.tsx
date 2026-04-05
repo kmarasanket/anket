@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { CheckCircle2, Home } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { httpFrom } from '../../lib/supabaseHttp'
 
 export default function ThankYouPage() {
   const { slug } = useParams()
@@ -9,7 +9,9 @@ export default function ThankYouPage() {
 
   useEffect(() => {
     const loadData = async () => {
-      const { data } = await supabase.from('surveys').select('thank_you_message, title, tenant_id').eq('slug', slug).single()
+      const q = httpFrom('surveys').select('thank_you_message,title,tenant_id')
+      q.eq('slug', slug!)
+      const { data } = await q.single().execute()
       setSurvey(data)
     }
     if (slug) loadData()

@@ -5,7 +5,7 @@ import {
   Save, ArrowLeft, Plus, Trash2, 
   AlignLeft, CheckSquare, CircleDot, Star, Calendar, Baseline
 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { httpFrom, httpRpc, getStoredToken } from '../../lib/supabaseHttp'
 import { slugify } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -49,7 +49,10 @@ export default function AdminSurveyBuilder() {
     const loadSurvey = async () => {
       setLoading(true)
       try {
-        const { data: survey, error } = await supabase.from('surveys').select('*').eq('id', id).single()
+        // Anket verisi (raw fetch)
+        const surveyQuery = httpFrom('surveys').select('*')
+        surveyQuery.eq('id', id)
+        const { data: survey, error } = await surveyQuery.single().execute()
         if (error) throw error
         if (survey) {
           setSurveyData({
@@ -60,7 +63,11 @@ export default function AdminSurveyBuilder() {
             thank_you_message: survey.thank_you_message || '',
             slug: survey.slug
           })
-          const { data: qData, error: qError } = await supabase.from('questions').select('*').eq('survey_id', id).order('order_index')
+          // Sorular (raw fetch)
+          const qQuery = httpFrom('questions').select('*')
+          qQuery.eq('survey_id', id)
+          qQuery.order('order_index', { ascending: true })
+          const { data: qData, error: qError } = await qQuery.execute()
           if (qError) throw qError
           setQuestions(qData || [])
         }
@@ -117,71 +124,31 @@ export default function AdminSurveyBuilder() {
 
   const handleSave = async () => {
     if (!tenant || !user) {
-        addNotification('Kurum veya kullanıcı bilgisi eksik, lütfen sayfayı yenileyin.', 'error')
-        return
+      addNotification('Kurum veya kullanıcı bilgisi eksik, lütfen sayfayı yenileyin.', 'error')
+      return
     }
-    
     if (!surveyData.title.trim()) {
       addNotification('Lütfen bir anket başlığı girin.', 'warning')
       return
     }
 
     setSaving(true)
-    
     try {
-      setSaving(true)
-      console.log('Kayıt işlemi başlatıldı (Stabil Mod)...')
-      
-      let accessToken = ''
-      
-      // 1. ADIM: Oturum Anahtarı Erişimi
-      try {
-        const { data: { session } } = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1500))
-        ]) as any
-        if (session) accessToken = session.access_token
-      } catch (e) {
-        console.warn('Ondine session API gecikti, depolama tarayıcısı devreye giriyor...')
-      }
-
-      // Scavenger Fallback (Oturum kilitlenmelerini aşmak için)
+      // ── ADIM 1: Token Al (Kütüphane sıfır bağımlılık)
+      const accessToken = getStoredToken()
       if (!accessToken) {
-        const allStorages = [localStorage, sessionStorage]
-        for (const store of allStorages) {
-          for (const key of Object.keys(store)) {
-            try {
-              const val = store.getItem(key)
-              if (val && (val.includes('access_token') || val.includes('token'))) {
-                const parsed = JSON.parse(val)
-                const found = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed.token
-                if (found) { accessToken = found; break; }
-              }
-            } catch (err) {}
-          }
-          if (accessToken) break
-        }
-      }
-
-      if (!accessToken) {
-        addNotification('Oturum anahtarı alınamadı. Lütfen sayfayı yenileyip tekrar giriş yapın.', 'error')
+        addNotification('Oturum bulunamadı. Lütfen sayfayı yenileyip tekrar giriş yapın.', 'error')
         return
       }
 
-      // 2. ADIM: Veri Hazırlığı
+      // ── ADIM 2: Anket Kaydet (UPSERT via RPC)
       const surveyId = id || uuidv4()
       const baseSlug = slugify(surveyData.title).substring(0, 50)
-      const finalSlug = id ? (surveyData.slug || baseSlug) : `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
-      
-      const rpcUrl = `${(supabase as any).supabaseUrl}/rest/v1/rpc/save_survey_secure`
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': `${(supabase as any).supabaseKey}`,
-        'Prefer': 'return=minimal'
-      }
-      
-      const body = JSON.stringify({
+      const finalSlug = id
+        ? (surveyData.slug || baseSlug)
+        : `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
+
+      const { error: rpcError } = await httpRpc('save_survey_secure', {
         p_id: surveyId,
         p_tenant_id: tenant.id,
         p_title: surveyData.title.trim(),
@@ -191,25 +158,16 @@ export default function AdminSurveyBuilder() {
         p_welcome_message: surveyData.welcome_message || null,
         p_thank_you_message: surveyData.thank_you_message || null
       })
+      if (rpcError) throw rpcError
 
-      // 3. ADIM: Güvenli Kayıt (RPC via Raw Fetch)
-      console.log('Anket verileri gönderiliyor...')
-      const response = await window.fetch(rpcUrl, {
-        method: 'POST',
-        headers,
-        body
-      })
+      // ── ADIM 3: Soruları Senkronize Et (raw fetch)
+      // Önce mevcut soruları sil
+      const { error: delError } = await httpFrom('questions')
+        .delete()
+        .eq('survey_id', surveyId)
+        .execute()
+      if (delError) throw delError
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Sunucu Hatası: ${errorText}`)
-      }
-
-      // 4. ADIM: Soruların Senkronizasyonu
-      console.log('Sorular güncelleniyor...')
-      // Mevcut soruları temizle
-      await supabase.from('questions').delete().eq('survey_id', surveyId)
-      
       // Yeni soruları ekle
       if (questions.length > 0) {
         const questionsToInsert = questions.map((q, idx) => ({
@@ -221,22 +179,16 @@ export default function AdminSurveyBuilder() {
           order_index: idx,
           options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null
         }))
-        
-        const { error: qError } = await supabase.from('questions').insert(questionsToInsert)
-        if (qError) throw qError
+        const { error: insError } = await httpFrom('questions').insert(questionsToInsert)
+        if (insError) throw insError
       }
 
-      console.log('Kayıt başarılı!')
       addNotification('Anket başarıyla kaydedildi.', 'success')
-      
-      // Veritabanı yansıması için çok kısa bir bekleme (300ms)
-      setTimeout(() => {
-        navigate('/admin/anketler')
-      }, 300)
+      setTimeout(() => navigate('/admin/anketler'), 300)
 
     } catch (e: any) {
       console.error('Kayıt Hatası:', e)
-      addNotification('Kayıt sırasında bir hata oluştu: ' + (e.message || 'Bilinmeyen Hata'), 'error')
+      addNotification('Kayıt başarısız: ' + (e.message || 'Bilinmeyen hata'), 'error')
     } finally {
       setSaving(false)
     }

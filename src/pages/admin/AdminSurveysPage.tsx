@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDate } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -19,12 +19,10 @@ export default function AdminSurveysPage() {
     if (!tenant?.id) return
     setLoading(true)
     try {
-      const { data, error } = await supabase
-          .from('surveys')
-          .select('*')
-          .eq('tenant_id', tenant.id)
-          .order('created_at', { ascending: false })
-      
+      const q = httpFrom('surveys').select('*')
+      q.eq('tenant_id', tenant.id)
+      q.order('created_at', { ascending: false })
+      const { data, error } = await q.execute()
       if (error) throw error
       setSurveys(data || [])
     } catch (err: any) {
@@ -53,7 +51,7 @@ export default function AdminSurveysPage() {
   const handleDelete = async (id: string, title: string) => {
     if (confirm(`'${title}' anketini silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm yanıtlar silinir.`)) {
       try {
-        const { error } = await supabase.from('surveys').delete().eq('id', id)
+        const { error } = await httpFrom('surveys').delete().eq('id', id).execute()
         if (error) throw error
         addNotification('Anket silindi.', 'success')
         fetchSurveys()

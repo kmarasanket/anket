@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Download, Activity, LayoutList, X } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDateTime } from '../../lib/utils'
 
 export default function AdminSurveyResults() {
@@ -14,15 +14,17 @@ export default function AdminSurveyResults() {
   useEffect(() => {
     const loadResults = async () => {
       // 1. Anket bilgilerini çek
-      const { data: s } = await supabase.from('surveys').select('*').eq('id', id).single()
+      const qSurvey = httpFrom('surveys').select('*')
+      qSurvey.eq('id', id!)
+      const { data: s } = await qSurvey.single().execute()
       setSurvey(s)
 
-      // 2. Yanıtları tam liste yerine sayım ve basit listeleme olarak çek
-      const { data: r } = await supabase.from('responses')
-        .select('*, response_answers(*)')
-        .eq('survey_id', id)
-        .eq('is_complete', true)
-        .order('completed_at', { ascending: false })
+      // 2. Yanıtları çek
+      const qResp = httpFrom('responses').select('*, response_answers(*)')
+      qResp.eq('survey_id', id!)
+      qResp.eq('is_complete', 'true')
+      qResp.order('completed_at', { ascending: false })
+      const { data: r } = await qResp.execute()
 
       setResponses(r || [])
       setLoading(false)

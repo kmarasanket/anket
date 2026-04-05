@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, Users, Eye, Plus, ChevronRight, Activity } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { httpFrom } from '../../lib/supabaseHttp'
 import { useAuthStore } from '../../stores/authStore'
 import { formatDate, formatDateTime } from '../../lib/utils'
 
@@ -13,27 +13,37 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const loadData = async () => {
-      // Not: RLS (Row Level Security) sayesinde sadece bu kurumun verileri gelir.
-      // frontend'den tenant_id filtresi eklemeye gerek yoktur, Supabase Auth bunu çözer.
-      
-      const [surveysRes, responsesRes, allResponsesRes] = await Promise.all([
-        supabase.from('surveys').select('*').eq('status', 'active').order('created_at', { ascending: false }),
-        supabase.from('responses').select('id', { count: 'exact', head: true }).eq('is_complete', true),
-        supabase.from('responses').select('id', { count: 'exact', head: true })
-      ])
+      try {
+        // Aktif anketler
+        const qSurveys = httpFrom('surveys').select('*')
+        qSurveys.eq('status', 'active')
+        qSurveys.order('created_at', { ascending: false })
+        const surveysRes = await qSurveys.execute()
 
-      const active = surveysRes.data?.length || 0
-      const completed = responsesRes.count || 0
-      const total = allResponsesRes.count || 0
-      
-      setStats({
-        activeSurveys: active,
-        totalResponses: completed,
-        completionRate: total ? Math.round((completed / total) * 100) : 0
-      })
+        // Tamamlanan yanıtlar
+        const qCompleted = httpFrom('responses').select('id')
+        qCompleted.eq('is_complete', 'true')
+        const completedRes = await qCompleted.execute()
 
-      setRecentSurveys(surveysRes.data?.slice(0, 5) || [])
-      setLoading(false)
+        // Tüm yanıtlar
+        const qAll = httpFrom('responses').select('id')
+        const allRes = await qAll.execute()
+
+        const active = surveysRes.data?.length || 0
+        const completed = completedRes.data?.length || 0
+        const total = allRes.data?.length || 0
+
+        setStats({
+          activeSurveys: active,
+          totalResponses: completed,
+          completionRate: total ? Math.round((completed / total) * 100) : 0
+        })
+        setRecentSurveys(surveysRes.data?.slice(0, 5) || [])
+      } catch (err) {
+        console.error('Dashboard yüklenemedi:', err)
+      } finally {
+        setLoading(false)
+      }
     }
     loadData()
   }, [])

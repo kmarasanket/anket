@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Building2, ArrowRight } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { httpFrom } from '../../lib/supabaseHttp'
 import { cookies, generateSessionToken, hashIP } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
 
@@ -26,14 +26,15 @@ export default function PublicSurveyPage() {
     const loadSurvey = async () => {
       setLoading(true)
       try {
-        const { data: s, error: sErr } = await supabase.from('surveys').select('*').eq('slug', slug).single()
-        
+        const qSurvey = httpFrom('surveys').select('*')
+        qSurvey.eq('slug', slug!)
+        const { data: s, error: sErr } = await qSurvey.single().execute()
+
         if (sErr || !s) {
           setLoading(false)
           return
         }
 
-        // Aktiflik kontrolü
         if (s.status !== 'active') {
           setSurvey({ ...s, is_closed: true })
           setLoading(false)
@@ -42,12 +43,17 @@ export default function PublicSurveyPage() {
 
         setSurvey(s)
 
-        // 2. Kurum bilgilerini al
-        const { data: t } = await supabase.from('tenants').select('name, logo_url').eq('id', s.tenant_id).single()
+        // Kurum bilgilerini al
+        const qTenant = httpFrom('tenants').select('name,logo_url')
+        qTenant.eq('id', s.tenant_id)
+        const { data: t } = await qTenant.single().execute()
         setTenant(t)
 
-        // 3. Soruları al
-        const { data: q } = await supabase.from('questions').select('*').eq('survey_id', s.id).order('order_index')
+        // Soruları al
+        const qQ = httpFrom('questions').select('*')
+        qQ.eq('survey_id', s.id)
+        qQ.order('order_index', { ascending: true })
+        const { data: q } = await qQ.execute()
         setQuestions(q || [])
       } catch (err: any) {
         addNotification('Anket yüklenirken bir hata oluştu.', 'error')
@@ -145,29 +151,31 @@ export default function PublicSurveyPage() {
         sessionToken = generateSessionToken()
         cookies.set(`survey_session_${survey.id}`, sessionToken, 30)
       }
-
-      const ip = '127.0.0.1' 
+      const ip = '127.0.0.1'
       const hashedIp = await hashIP(ip)
 
-      const { data: responseData, error: responseError } = await supabase.from('responses').insert({
+      // Yanıtı kaydet ve geri dönen ID'yi al
+      const { data: responseData, error: responseError } = await httpFrom('responses').insert({
         survey_id: survey.id,
         tenant_id: survey.tenant_id,
         session_token: sessionToken,
         ip_hash: hashedIp,
         is_complete: true,
         metadata: { user_agent: navigator.userAgent }
-      }).select().single()
+      }, { returnData: true })
 
       if (responseError) throw responseError
+      if (!responseData?.[0]?.id) throw new Error('Yanıt ID’si alınamadı.')
 
       const answersToInsert = Object.entries(answers).map(([question_id, answer]) => ({
-        response_id: responseData.id,
+        response_id: responseData[0].id,
         question_id,
-        answer: { value: answer } // Structured for the JSONB column
+        answer: { value: answer }
       }))
 
       if (answersToInsert.length > 0) {
-        await supabase.from('response_answers').insert(answersToInsert)
+        const { error: ansErr } = await httpFrom('response_answers').insert(answersToInsert)
+        if (ansErr) throw ansErr
       }
 
       addNotification('Anket başarıyla gönderildi.', 'success')
