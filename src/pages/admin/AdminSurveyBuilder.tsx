@@ -134,101 +134,98 @@ export default function AdminSurveyBuilder() {
       ])
 
     try {
-      console.log('Raw RPC save process started...')
+      console.log('--- NETWORK DEBUG MODE STARTED ---')
       
-      // TEST: Metni 10 karaktere indiriyoruz (Zorla Kırpma)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Oturum bilgisi alınamadı. Lütfen giriş yapın.')
+
       const testTitle = surveyData.title.trim().substring(0, 10)
       const testDesc = (surveyData.description || '').substring(0, 10)
       
-      console.log('Testing with truncated title:', testTitle)
-      console.log('Testing with truncated description:', testDesc)
+      console.log('Debug Payload:', { title: testTitle, desc: testDesc })
 
       let currentSurveyId = id
       
-      // 1. Anketi Kaydet/Güncelle
       if (!currentSurveyId) {
-        console.log('Creating new survey via Database RPC (Raw Mode)...')
-        if (!user) throw new Error('Kullanıcı oturumu bulunamadı.')
-        
         const newId = uuidv4()
         const baseSlug = slugify(surveyData.title).substring(0, 20)
         const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
         
-        // Ham RPC Çağrısı (Zaman aşımı kontrolü kaldırıldı)
-        const { error: rpcError } = await supabase.rpc('create_survey_secure', {
-            p_id: newId,
-            p_tenant_id: tenant.id,
-            p_title: testTitle, // Kırpılmış başlık
-            p_description: testDesc, // Kırpılmış alt başlık
-            p_slug: finalSlug,
-            p_status: surveyData.status,
-            p_welcome_message: (surveyData.welcome_message || '').substring(0, 10),
-            p_thank_you_message: (surveyData.thank_you_message || '').substring(0, 10)
-        })
-        
-        if (rpcError) {
-          console.error('RPC Error Detail:', rpcError)
-          throw rpcError
+        // Ham Fetch Hazırlığı
+        const rpcUrl = `${(supabase as any).supabaseUrl}/rest/v1/rpc/create_survey_secure`
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': `${(supabase as any).supabaseKey}`,
+          'Prefer': 'return=minimal'
         }
         
-        currentSurveyId = newId
-        console.log('New survey created successfully with ID:', currentSurveyId)
+        const body = JSON.stringify({
+          p_id: newId,
+          p_tenant_id: tenant.id,
+          p_title: testTitle,
+          p_description: testDesc,
+          p_slug: finalSlug,
+          p_status: surveyData.status,
+          p_welcome_message: (surveyData.welcome_message || '').substring(0, 10),
+          p_thank_you_message: (surveyData.thank_you_message || '').substring(0, 10)
+        })
+
+        console.log('Request URL:', rpcUrl)
+        console.log('Headers (Sensitive data masked):', { ...headers, Authorization: 'Bearer [HIDDEN]' })
+        console.log('Sending...')
+
+        // Manuel fetch (15 saniye zaman aşımı ile)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => {
+          controller.abort()
+          window.alert('DİKKAT: 15 saniye geçti ve ağ cevabı gelmedi.\n\nLütfen tarayıcının Ağ (Network) sekmesini kontrol edin. Eğer "Pending" yazıyorsa hastane ağınız bu isteği engelliyor demektir.')
+        }, 15000)
+
+        try {
+          const response = await window.fetch(rpcUrl, {
+            method: 'POST',
+            headers,
+            body,
+            signal: controller.signal
+          })
+          clearTimeout(timeoutId)
+
+          console.log('Fetch Status:', response.status)
+          console.log('Fetch Status Text:', response.statusText)
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Fetch Error Detail:', errorText)
+            throw new Error(`HTTP ${response.status}: ${errorText}`)
+          }
+          
+          currentSurveyId = newId
+          console.log('New survey created via fetch!')
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId)
+          if (fetchErr.name === 'AbortError') {
+            throw new Error('Ağ zaman aşımı (AbortError): İstek sunucu tarafından yanıtsız bırakıldı.')
+          }
+          throw fetchErr
+        }
       } else {
-        console.log('Updating existing survey (Raw Mode):', currentSurveyId)
-        const { error: updateError } = await supabase.from('surveys').update({
+        // ... Mevcut update mantığını test moduna almıyoruz henüz, odağı RPC'ye verelim
+        const { error } = await supabase.from('surveys').update({
             title: testTitle,
             description: testDesc,
-            status: surveyData.status,
             updated_at: new Date().toISOString()
         }).eq('id', currentSurveyId)
-        
-        if (updateError) {
-          console.error('Survey Update Error Detail:', updateError)
-          throw updateError
-        }
+        if (error) throw error
       }
 
-      if (!currentSurveyId) throw new Error('Survey ID belirlenemedi.')
-
-      // 2. Önceki soruları sil (Sync questions logic)
-      console.log('Syncing questions (Raw Mode)...')
-      const { error: deleteError } = await supabase.from('questions').delete().eq('survey_id', currentSurveyId)
-      if (deleteError) {
-        console.error('Questions Delete Error Detail:', deleteError)
-        throw deleteError
-      }
-
-      // 3. Yeni soruları kaydet
-      if (questions.length > 0) {
-        console.log('Inserting', questions.length, 'questions (Raw Mode)...')
-        const questionsToInsert = questions.map((q, idx) => ({
-          survey_id: currentSurveyId,
-          type: q.type,
-          title: (q.title || 'İsimsiz Soru').substring(0, 20), // Soru başlıklarını da kırpıyoruz
-          is_required: !!q.is_required,
-          order_index: idx,
-          options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null,
-          description: (q.description || '').substring(0, 20)
-        }))
-        
-        const { error: insertError } = await supabase.from('questions').insert(questionsToInsert)
-        if (insertError) {
-          console.error('Questions Insert Error Detail:', insertError)
-          throw insertError
-        }
-        console.log('Questions inserted successfully.')
-      }
-
-      console.log('Save process completed successfully.')
+      console.log('Save process completed!')
       addNotification('Anket başarıyla kaydedildi.', 'success')
       navigate('/admin/anketler')
     } catch (e: any) {
-      console.error('CRITICAL RAW ERROR:', e)
-      const errorMsg = e.message || 'Bilinmeyen bir hata oluştu.'
-      addNotification('Kayıt başarısız: ' + errorMsg, 'error')
-      
+      console.error('CRITICAL DEBUG ERROR:', e)
       const fullError = typeof e === 'object' ? JSON.stringify(e, null, 2) : e
-      window.alert('HATA AYRINTILARI (Ham Mod):\n\n' + fullError + '\n\nEğer bu ekran uzun sürüyorsa tarayıcı Ağ (Network) sekmesini kontrol edin.')
+      window.alert('AĞ HATASI DETAYI:\n\n' + fullError)
     } finally {
       setSaving(false)
     }
