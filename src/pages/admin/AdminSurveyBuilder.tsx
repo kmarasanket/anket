@@ -134,15 +134,42 @@ export default function AdminSurveyBuilder() {
       ])
 
     try {
-      console.log('--- NETWORK DEBUG MODE STARTED ---')
+      console.log('--- DEEP TRACE MODE (CP) STARTED ---')
+      console.log('CP1: handleSave tetiklendi')
       
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Oturum bilgisi alınamadı. Lütfen giriş yapın.')
+      let accessToken = ''
+      
+      try {
+        console.log('CP2: Session okuma (Standard API) denemesi...')
+        // getSession'u bir promise race ile sarmalayalım ki donarsa anlayalım
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('getSession_timeout')), 3000))
+        
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
+        if (session) {
+          accessToken = session.access_token
+          console.log('CP2-S: Session başarıyla alındı (Standard API)')
+        }
+      } catch (sessErr: any) {
+        console.warn('CP2-W: Standard API dondu veya hata verdi. LocalStorage denemesi yapılıyor...')
+        // Fallback: LocalStorage'dan doğrudan okuma (sb- ile başlayan key)
+        const storageKey = Object.keys(localStorage).find(key => key.startsWith('sb-') && key.endsWith('-auth-token'))
+        if (storageKey) {
+          const rawToken = localStorage.getItem(storageKey)
+          if (rawToken) {
+            const parsed = JSON.parse(rawToken)
+            accessToken = parsed.access_token
+            console.log('CP2-F: Token LocalStorage üzerinden ham olarak alındı!')
+          }
+        }
+      }
+
+      if (!accessToken) throw new Error('Oturum anahtarı (Token) bulunamadı. Lütfen sayfayı yenileyip tekrar giriş yapın.')
 
       const testTitle = surveyData.title.trim().substring(0, 10)
       const testDesc = (surveyData.description || '').substring(0, 10)
       
-      console.log('Debug Payload:', { title: testTitle, desc: testDesc })
+      console.log('CP3: Veriler hazırlandı. Title:', testTitle)
 
       let currentSurveyId = id
       
@@ -151,11 +178,10 @@ export default function AdminSurveyBuilder() {
         const baseSlug = slugify(surveyData.title).substring(0, 20)
         const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
         
-        // Ham Fetch Hazırlığı
         const rpcUrl = `${(supabase as any).supabaseUrl}/rest/v1/rpc/create_survey_secure`
         const headers = {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
           'apikey': `${(supabase as any).supabaseKey}`,
           'Prefer': 'return=minimal'
         }
@@ -171,15 +197,14 @@ export default function AdminSurveyBuilder() {
           p_thank_you_message: (surveyData.thank_you_message || '').substring(0, 10)
         })
 
-        console.log('Request URL:', rpcUrl)
-        console.log('Headers (Sensitive data masked):', { ...headers, Authorization: 'Bearer [HIDDEN]' })
-        console.log('Sending...')
+        console.log('CP4: İstek gönderilmeye hazır. URL:', rpcUrl)
+        console.log('CP4-Headers:', { ...headers, Authorization: 'Bearer [HIDDEN]' })
+        console.log('--- CP5: window.fetch() ÇAĞRILIYOR... ---')
 
-        // Manuel fetch (15 saniye zaman aşımı ile)
         const controller = new AbortController()
         const timeoutId = setTimeout(() => {
           controller.abort()
-          window.alert('DİKKAT: 15 saniye geçti ve ağ cevabı gelmedi.\n\nLütfen tarayıcının Ağ (Network) sekmesini kontrol edin. Eğer "Pending" yazıyorsa hastane ağınız bu isteği engelliyor demektir.')
+          window.alert('DİKKAT: 15 saniye geçti ve ağ yanıtı gelmedi (CP5 noktasında durdu).\n\nLütfen Ağ sekmesini kontrol edin.')
         }, 15000)
 
         try {
@@ -190,27 +215,20 @@ export default function AdminSurveyBuilder() {
             signal: controller.signal
           })
           clearTimeout(timeoutId)
-
-          console.log('Fetch Status:', response.status)
-          console.log('Fetch Status Text:', response.statusText)
+          console.log('CP6: Yanıt alındı! Status:', response.status)
 
           if (!response.ok) {
             const errorText = await response.text()
-            console.error('Fetch Error Detail:', errorText)
             throw new Error(`HTTP ${response.status}: ${errorText}`)
           }
           
           currentSurveyId = newId
-          console.log('New survey created via fetch!')
         } catch (fetchErr: any) {
           clearTimeout(timeoutId)
-          if (fetchErr.name === 'AbortError') {
-            throw new Error('Ağ zaman aşımı (AbortError): İstek sunucu tarafından yanıtsız bırakıldı.')
-          }
           throw fetchErr
         }
       } else {
-        // ... Mevcut update mantığını test moduna almıyoruz henüz, odağı RPC'ye verelim
+        console.log('CP3-U: Update moduna geçiliyor...')
         const { error } = await supabase.from('surveys').update({
             title: testTitle,
             description: testDesc,
@@ -219,13 +237,13 @@ export default function AdminSurveyBuilder() {
         if (error) throw error
       }
 
-      console.log('Save process completed!')
+      console.log('--- CP_SUCCESS: İşlem başarıyla tamamlandı ---')
       addNotification('Anket başarıyla kaydedildi.', 'success')
       navigate('/admin/anketler')
     } catch (e: any) {
-      console.error('CRITICAL DEBUG ERROR:', e)
+      console.error('--- CP_ERROR DETAYI ---', e)
       const fullError = typeof e === 'object' ? JSON.stringify(e, null, 2) : e
-      window.alert('AĞ HATASI DETAYI:\n\n' + fullError)
+      window.alert('TEŞHİS HATASI:\n\n' + fullError)
     } finally {
       setSaving(false)
     }
