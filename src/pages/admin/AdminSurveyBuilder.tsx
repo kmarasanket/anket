@@ -38,6 +38,7 @@ export default function AdminSurveyBuilder() {
     status: 'draft' as 'draft' | 'active' | 'closed',
     welcome_message: '',
     thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.',
+    slug: ''
   })
 
   // Sorular Listesi
@@ -57,6 +58,7 @@ export default function AdminSurveyBuilder() {
             status: survey.status,
             welcome_message: survey.welcome_message || '',
             thank_you_message: survey.thank_you_message || '',
+            slug: survey.slug
           })
           const { data: qData, error: qError } = await supabase.from('questions').select('*').eq('survey_id', id).order('order_index')
           if (qError) throw qError
@@ -126,134 +128,115 @@ export default function AdminSurveyBuilder() {
 
     setSaving(true)
     
-    // Zaman aşımı yardımcısı (60 saniye - Veritabanı hatasını beklemek için)
-    const withTimeout = (promise: any) => 
-      Promise.race([
-        Promise.resolve(promise),
-        new Promise((_, m) => setTimeout(() => m(new Error('İşlem 60 saniye içinde yanıt vermedi (Zaman Aşımı). Lütfen SQL optimizasyonunu çalıştırın.')), 60000))
-      ])
-
     try {
-      console.log('--- STORAGE SCAVENGER MODE (CP) STARTED ---')
-      console.log('CP1: handleSave tetiklendi')
+      setSaving(true)
+      console.log('Kayıt işlemi başlatıldı (Stabil Mod)...')
       
       let accessToken = ''
       
-      // 1. ADIM: Standard API (Hızlı deneme)
+      // 1. ADIM: Oturum Anahtarı Erişimi
       try {
-        console.log('CP2: Session okuma (Standard API) denemesi (1sn)...')
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1000))
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
+        const { data: { session } } = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1500))
+        ]) as any
         if (session) accessToken = session.access_token
       } catch (e) {
-        console.warn('CP2-W: Standard API dondu/hata verdi. Scavenger devreye giriyor...')
+        console.warn('Ondine session API gecikti, depolama tarayıcısı devreye giriyor...')
       }
 
-      // 2. ADIM: Deep Scavenger (Hafıza Taraması)
+      // Scavenger Fallback (Oturum kilitlenmelerini aşmak için)
       if (!accessToken) {
-        console.log('CP2-S: Derin Hafıza Taraması (LocalStorage + SessionStorage)...')
-        const allStorages = [
-          { name: 'LocalStorage', store: localStorage },
-          { name: 'SessionStorage', store: sessionStorage }
-        ]
-
-        allStorages.forEach(({ name, store }) => {
-          console.log(`- ${name} Anahtarları:`, Object.keys(store))
-          Object.keys(store).forEach(key => {
+        const allStorages = [localStorage, sessionStorage]
+        for (const store of allStorages) {
+          for (const key of Object.keys(store)) {
             try {
               const val = store.getItem(key)
               if (val && (val.includes('access_token') || val.includes('token'))) {
                 const parsed = JSON.parse(val)
-                // Supabase nested yapısı veya düz yapı
-                const foundToken = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed.token
-                if (foundToken) {
-                  accessToken = foundToken
-                  console.log(`CP2-F: Token ${name} -> [${key}] içinden başarıyla çıkarıldı!`)
-                }
+                const found = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed.token
+                if (found) { accessToken = found; break; }
               }
-            } catch (pErr) { /* JSON olmayanlar atlasın */ }
-          })
-        })
-      }
-
-      if (!accessToken) throw new Error('Oturum anahtarı (Token) bulunamadı. Lütfen sayfayı yenileyip tekrar giriş yapın (Incognito sekmelerde Manuel Giriş gerekebilir).')
-
-      const testTitle = surveyData.title.trim().substring(0, 10)
-      const testDesc = (surveyData.description || '').substring(0, 10)
-      console.log('CP3: Veriler hazırlandı. Token Status: OK')
-
-      let currentSurveyId = id
-      
-      if (!currentSurveyId) {
-        const newId = uuidv4()
-        const baseSlug = slugify(surveyData.title).substring(0, 20)
-        const finalSlug = `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
-        
-        const rpcUrl = `${(supabase as any).supabaseUrl}/rest/v1/rpc/create_survey_secure`
-        const headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          'apikey': `${(supabase as any).supabaseKey}`,
-          'Prefer': 'return=minimal'
-        }
-        
-        const body = JSON.stringify({
-          p_id: newId,
-          p_tenant_id: tenant.id,
-          p_title: testTitle,
-          p_description: testDesc,
-          p_slug: finalSlug,
-          p_status: surveyData.status,
-          p_welcome_message: (surveyData.welcome_message || '').substring(0, 10),
-          p_thank_you_message: (surveyData.thank_you_message || '').substring(0, 10)
-        })
-
-        console.log('CP4: İstek Gönderime Hazır. (Fetch starting...)')
-        console.log('--- CP5: window.fetch() ÇAĞRILIYOR... ---')
-
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => {
-          controller.abort()
-          window.alert('DİKKAT: 15 saniye geçti ve ağ yanıtı gelmedi (CP5 noktasında durdu).\n\nAğ (Network) sekmenizde "Pending" görüyorsanız hastane firewall\'ı bu isteği engelliyor demektir.')
-        }, 15000)
-
-        try {
-          const response = await window.fetch(rpcUrl, {
-            method: 'POST',
-            headers,
-            body,
-            signal: controller.signal
-          })
-          clearTimeout(timeoutId)
-          console.log('CP6: Yanıt alındı! Status:', response.status)
-
-          if (!response.ok) {
-            const errorText = await response.text()
-            throw new Error(`HTTP ${response.status}: ${errorText}`)
+            } catch (err) {}
           }
-          currentSurveyId = newId
-        } catch (fetchErr: any) {
-          clearTimeout(timeoutId)
-          throw fetchErr
+          if (accessToken) break
         }
-      } else {
-        console.log('CP3-U: Update moduna geçiliyor...')
-        const { error } = await supabase.from('surveys').update({
-            title: testTitle,
-            description: testDesc,
-            updated_at: new Date().toISOString()
-        }).eq('id', currentSurveyId)
-        if (error) throw error
       }
 
-      console.log('--- CP_SUCCESS: İşlem başarıyla tamamlandı ---')
+      if (!accessToken) {
+        addNotification('Oturum anahtarı alınamadı. Lütfen sayfayı yenileyip tekrar giriş yapın.', 'error')
+        return
+      }
+
+      // 2. ADIM: Veri Hazırlığı
+      const surveyId = id || uuidv4()
+      const baseSlug = slugify(surveyData.title).substring(0, 50)
+      const finalSlug = id ? (surveyData.slug || baseSlug) : `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
+      
+      const rpcUrl = `${(supabase as any).supabaseUrl}/rest/v1/rpc/save_survey_secure`
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': `${(supabase as any).supabaseKey}`,
+        'Prefer': 'return=minimal'
+      }
+      
+      const body = JSON.stringify({
+        p_id: surveyId,
+        p_tenant_id: tenant.id,
+        p_title: surveyData.title.trim(),
+        p_description: surveyData.description || null,
+        p_slug: finalSlug,
+        p_status: surveyData.status,
+        p_welcome_message: surveyData.welcome_message || null,
+        p_thank_you_message: surveyData.thank_you_message || null
+      })
+
+      // 3. ADIM: Güvenli Kayıt (RPC via Raw Fetch)
+      console.log('Anket verileri gönderiliyor...')
+      const response = await window.fetch(rpcUrl, {
+        method: 'POST',
+        headers,
+        body
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Sunucu Hatası: ${errorText}`)
+      }
+
+      // 4. ADIM: Soruların Senkronizasyonu
+      console.log('Sorular güncelleniyor...')
+      // Mevcut soruları temizle
+      await supabase.from('questions').delete().eq('survey_id', surveyId)
+      
+      // Yeni soruları ekle
+      if (questions.length > 0) {
+        const questionsToInsert = questions.map((q, idx) => ({
+          survey_id: surveyId,
+          type: q.type,
+          title: q.title || 'İsimsiz Soru',
+          description: q.description || null,
+          is_required: !!q.is_required,
+          order_index: idx,
+          options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null
+        }))
+        
+        const { error: qError } = await supabase.from('questions').insert(questionsToInsert)
+        if (qError) throw qError
+      }
+
+      console.log('Kayıt başarılı!')
       addNotification('Anket başarıyla kaydedildi.', 'success')
-      navigate('/admin/anketler')
+      
+      // Veritabanı yansıması için çok kısa bir bekleme (300ms)
+      setTimeout(() => {
+        navigate('/admin/anketler')
+      }, 300)
+
     } catch (e: any) {
-      console.error('--- CP_ERROR DETAYI ---', e)
-      const fullError = typeof e === 'object' ? JSON.stringify(e, null, 2) : e
-      window.alert('TEŞHİS HATASI (SCAVENGER):\n\n' + fullError)
+      console.error('Kayıt Hatası:', e)
+      addNotification('Kayıt sırasında bir hata oluştu: ' + (e.message || 'Bilinmeyen Hata'), 'error')
     } finally {
       setSaving(false)
     }
