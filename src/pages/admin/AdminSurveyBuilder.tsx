@@ -134,42 +134,54 @@ export default function AdminSurveyBuilder() {
       ])
 
     try {
-      console.log('--- DEEP TRACE MODE (CP) STARTED ---')
+      console.log('--- STORAGE SCAVENGER MODE (CP) STARTED ---')
       console.log('CP1: handleSave tetiklendi')
       
       let accessToken = ''
       
+      // 1. ADIM: Standard API (Hızlı deneme)
       try {
-        console.log('CP2: Session okuma (Standard API) denemesi...')
-        // getSession'u bir promise race ile sarmalayalım ki donarsa anlayalım
+        console.log('CP2: Session okuma (Standard API) denemesi (1sn)...')
         const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('getSession_timeout')), 3000))
-        
+        const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1000))
         const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any
-        if (session) {
-          accessToken = session.access_token
-          console.log('CP2-S: Session başarıyla alındı (Standard API)')
-        }
-      } catch (sessErr: any) {
-        console.warn('CP2-W: Standard API dondu veya hata verdi. LocalStorage denemesi yapılıyor...')
-        // Fallback: LocalStorage'dan doğrudan okuma (sb- ile başlayan key)
-        const storageKey = Object.keys(localStorage).find(key => key.startsWith('sb-') && key.endsWith('-auth-token'))
-        if (storageKey) {
-          const rawToken = localStorage.getItem(storageKey)
-          if (rawToken) {
-            const parsed = JSON.parse(rawToken)
-            accessToken = parsed.access_token
-            console.log('CP2-F: Token LocalStorage üzerinden ham olarak alındı!')
-          }
-        }
+        if (session) accessToken = session.access_token
+      } catch (e) {
+        console.warn('CP2-W: Standard API dondu/hata verdi. Scavenger devreye giriyor...')
       }
 
-      if (!accessToken) throw new Error('Oturum anahtarı (Token) bulunamadı. Lütfen sayfayı yenileyip tekrar giriş yapın.')
+      // 2. ADIM: Deep Scavenger (Hafıza Taraması)
+      if (!accessToken) {
+        console.log('CP2-S: Derin Hafıza Taraması (LocalStorage + SessionStorage)...')
+        const allStorages = [
+          { name: 'LocalStorage', store: localStorage },
+          { name: 'SessionStorage', store: sessionStorage }
+        ]
+
+        allStorages.forEach(({ name, store }) => {
+          console.log(`- ${name} Anahtarları:`, Object.keys(store))
+          Object.keys(store).forEach(key => {
+            try {
+              const val = store.getItem(key)
+              if (val && (val.includes('access_token') || val.includes('token'))) {
+                const parsed = JSON.parse(val)
+                // Supabase nested yapısı veya düz yapı
+                const foundToken = parsed.access_token || (parsed.session && parsed.session.access_token) || parsed.token
+                if (foundToken) {
+                  accessToken = foundToken
+                  console.log(`CP2-F: Token ${name} -> [${key}] içinden başarıyla çıkarıldı!`)
+                }
+              }
+            } catch (pErr) { /* JSON olmayanlar atlasın */ }
+          })
+        })
+      }
+
+      if (!accessToken) throw new Error('Oturum anahtarı (Token) bulunamadı. Lütfen sayfayı yenileyip tekrar giriş yapın (Incognito sekmelerde Manuel Giriş gerekebilir).')
 
       const testTitle = surveyData.title.trim().substring(0, 10)
       const testDesc = (surveyData.description || '').substring(0, 10)
-      
-      console.log('CP3: Veriler hazırlandı. Title:', testTitle)
+      console.log('CP3: Veriler hazırlandı. Token Status: OK')
 
       let currentSurveyId = id
       
@@ -197,14 +209,13 @@ export default function AdminSurveyBuilder() {
           p_thank_you_message: (surveyData.thank_you_message || '').substring(0, 10)
         })
 
-        console.log('CP4: İstek gönderilmeye hazır. URL:', rpcUrl)
-        console.log('CP4-Headers:', { ...headers, Authorization: 'Bearer [HIDDEN]' })
+        console.log('CP4: İstek Gönderime Hazır. (Fetch starting...)')
         console.log('--- CP5: window.fetch() ÇAĞRILIYOR... ---')
 
         const controller = new AbortController()
         const timeoutId = setTimeout(() => {
           controller.abort()
-          window.alert('DİKKAT: 15 saniye geçti ve ağ yanıtı gelmedi (CP5 noktasında durdu).\n\nLütfen Ağ sekmesini kontrol edin.')
+          window.alert('DİKKAT: 15 saniye geçti ve ağ yanıtı gelmedi (CP5 noktasında durdu).\n\nAğ (Network) sekmenizde "Pending" görüyorsanız hastane firewall\'ı bu isteği engelliyor demektir.')
         }, 15000)
 
         try {
@@ -221,7 +232,6 @@ export default function AdminSurveyBuilder() {
             const errorText = await response.text()
             throw new Error(`HTTP ${response.status}: ${errorText}`)
           }
-          
           currentSurveyId = newId
         } catch (fetchErr: any) {
           clearTimeout(timeoutId)
@@ -243,7 +253,7 @@ export default function AdminSurveyBuilder() {
     } catch (e: any) {
       console.error('--- CP_ERROR DETAYI ---', e)
       const fullError = typeof e === 'object' ? JSON.stringify(e, null, 2) : e
-      window.alert('TEŞHİS HATASI:\n\n' + fullError)
+      window.alert('TEŞHİS HATASI (SCAVENGER):\n\n' + fullError)
     } finally {
       setSaving(false)
     }
