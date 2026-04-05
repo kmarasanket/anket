@@ -222,19 +222,21 @@ export default function AdminSurveyBuilder() {
 
       {/* Anket Başlığı ve Açıklaması */}
       <div className="card p-0 overflow-hidden border-t-8 border-t-primary-500">
-        <div className="p-8 space-y-4">
+        <div className="p-6 md:p-8 space-y-3">
           <input 
             value={surveyData.title}
             onChange={e => setSurveyData({...surveyData, title: e.target.value})}
-            className="w-full bg-transparent text-4xl font-display font-bold text-dark-50 focus:outline-none placeholder-dark-600"
+            className="block w-full min-w-0 bg-transparent text-2xl md:text-4xl font-display font-bold text-dark-50 focus:outline-none placeholder-dark-600 break-words overflow-hidden"
             placeholder="İsimsiz Anket"
+            style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
           />
           <textarea 
             value={surveyData.description}
             onChange={e => setSurveyData({...surveyData, description: e.target.value})}
-            className="w-full bg-transparent text-dark-300 focus:outline-none resize-none placeholder-dark-600"
+            className="block w-full min-w-0 bg-transparent text-dark-300 focus:outline-none resize-none placeholder-dark-600 overflow-hidden"
             placeholder="Anket açıklaması (isteğe bağlı)..."
             rows={2}
+            style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
           />
         </div>
       </div>
@@ -249,11 +251,11 @@ export default function AdminSurveyBuilder() {
             {/* Soru Üst Kısım: Başlık ve Tür */}
             <div className="flex flex-col md:flex-row gap-4 mb-4">
               {q.type === 'section' ? (
-                <div className="flex-1 space-y-2">
+                <div className="flex-1 space-y-2 min-w-0 overflow-hidden">
                   <input 
                     value={q.title}
                     onChange={e => updateQuestion(qIndex, { title: e.target.value })}
-                    className="input text-2xl font-display font-bold bg-dark-900 border-none border-b border-dark-700 rounded-none px-0 text-purple-400 focus:border-purple-500 w-full placeholder-purple-500/30"
+                    className="input text-xl md:text-2xl font-display font-bold bg-dark-900 border-none border-b border-dark-700 rounded-none px-0 text-purple-400 focus:border-purple-500 w-full placeholder-purple-500/30"
                     placeholder="Yeni Bölüm"
                   />
                   <input 
