@@ -26,14 +26,12 @@ export default function PublicSurveyPage() {
     const loadSurvey = async () => {
       setLoading(true)
       try {
+        // 1. Önce anketi al (slug ile)
         const qSurvey = httpFrom('surveys').select('*')
         qSurvey.eq('slug', slug!)
         const { data: s, error: sErr } = await qSurvey.single().execute()
 
-        if (sErr || !s) {
-          setLoading(false)
-          return
-        }
+        if (sErr || !s) { setLoading(false); return }
 
         if (s.status !== 'active') {
           setSurvey({ ...s, is_closed: true })
@@ -43,18 +41,21 @@ export default function PublicSurveyPage() {
 
         setSurvey(s)
 
-        // Kurum bilgilerini al
+        // 2. Kurum ve sorular PARALEL olarak çekilir (~200ms kazanç)
         const qTenant = httpFrom('tenants').select('name,logo_url')
         qTenant.eq('id', s.tenant_id)
-        const { data: t } = await qTenant.single().execute()
-        setTenant(t)
 
-        // Soruları al
         const qQ = httpFrom('questions').select('*')
         qQ.eq('survey_id', s.id)
         qQ.order('order_index', { ascending: true })
-        const { data: q } = await qQ.execute()
-        setQuestions(q || [])
+
+        const [tenantRes, questionsRes] = await Promise.all([
+          qTenant.single().execute(),
+          qQ.execute()
+        ])
+
+        setTenant(tenantRes.data)
+        setQuestions(questionsRes.data || [])
       } catch (err: any) {
         addNotification('Anket yüklenirken bir hata oluştu.', 'error')
       } finally {

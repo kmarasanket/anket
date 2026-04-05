@@ -1,21 +1,33 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 
-// Pages
-import LoginPage from './pages/auth/LoginPage'
-import SuperAdminLayout from './pages/super-admin/SuperAdminLayout'
-import AdminLayout from './pages/admin/AdminLayout'
+// Public pages — eagerly loaded (son kullanıcı kritik yollar)
 import PublicSurveyPage from './pages/survey/PublicSurveyPage'
 import ThankYouPage from './pages/survey/ThankYouPage'
 import NotificationContainer from './components/ui/NotificationContainer'
-import NotFoundPage from './pages/NotFoundPage'
+
+// Admin/Super-Admin — lazy loaded (sadece giriş yapan kullanıcılar için)
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
+const SuperAdminLayout = lazy(() => import('./pages/super-admin/SuperAdminLayout'))
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 // Guards
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
+// Lazy loading için minimal yükleniyor ekranı
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 animate-pulse" />
+    </div>
+  )
+}
+
+
 function App() {
-  const { initialize, initialized, loading } = useAuthStore()
+  const { initialize, initialized } = useAuthStore()
 
   useEffect(() => {
     initialize()
@@ -35,30 +47,32 @@ function App() {
   return (
     <BrowserRouter>
       <NotificationContainer />
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/s/:slug" element={<PublicSurveyPage />} />
-        <Route path="/s/:slug/tesekkurler" element={<ThankYouPage />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/s/:slug" element={<PublicSurveyPage />} />
+          <Route path="/s/:slug/tesekkurler" element={<ThankYouPage />} />
 
-        {/* Super Admin */}
-        <Route path="/super-admin/*" element={
-          <ProtectedRoute requiredRole="super_admin">
-            <SuperAdminLayout />
-          </ProtectedRoute>
-        } />
+          {/* Super Admin */}
+          <Route path="/super-admin/*" element={
+            <ProtectedRoute requiredRole="super_admin">
+              <SuperAdminLayout />
+            </ProtectedRoute>
+          } />
 
-        {/* Kurum Admin */}
-        <Route path="/admin/*" element={
-          <ProtectedRoute requiredRole="admin">
-            <AdminLayout />
-          </ProtectedRoute>
-        } />
+          {/* Kurum Admin */}
+          <Route path="/admin/*" element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminLayout />
+            </ProtectedRoute>
+          } />
 
-        {/* Root redirect */}
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+          {/* Root redirect */}
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

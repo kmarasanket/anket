@@ -6,7 +6,7 @@ import {
   AlignLeft, CheckSquare, CircleDot, Star, Calendar, Baseline
 } from 'lucide-react'
 import { httpFrom, httpRpc, getStoredToken } from '../../lib/supabaseHttp'
-import { slugify } from '../../lib/utils'
+import { generateShortSlug } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import type { QuestionType } from '../../lib/database.types'
@@ -49,11 +49,20 @@ export default function AdminSurveyBuilder() {
     const loadSurvey = async () => {
       setLoading(true)
       try {
-        // Anket verisi (raw fetch)
-        const surveyQuery = httpFrom('surveys').select('*')
-        surveyQuery.eq('id', id)
-        const { data: survey, error } = await surveyQuery.single().execute()
-        if (error) throw error
+        // Survey ve soruları paralel çek
+        const surveyQ = httpFrom('surveys').select('*')
+        surveyQ.eq('id', id)
+        const questionsQ = httpFrom('questions').select('*')
+        questionsQ.eq('survey_id', id)
+        questionsQ.order('order_index', { ascending: true })
+
+        const [surveyRes, questionsRes] = await Promise.all([
+          surveyQ.single().execute(),
+          questionsQ.execute()
+        ])
+
+        if (surveyRes.error) throw surveyRes.error
+        const survey = surveyRes.data
         if (survey) {
           setSurveyData({
             title: survey.title,
@@ -63,13 +72,7 @@ export default function AdminSurveyBuilder() {
             thank_you_message: survey.thank_you_message || '',
             slug: survey.slug
           })
-          // Sorular (raw fetch)
-          const qQuery = httpFrom('questions').select('*')
-          qQuery.eq('survey_id', id)
-          qQuery.order('order_index', { ascending: true })
-          const { data: qData, error: qError } = await qQuery.execute()
-          if (qError) throw qError
-          setQuestions(qData || [])
+          setQuestions(questionsRes.data || [])
         }
       } catch (err: any) {
         addNotification('Anket yüklenirken bir hata oluştu: ' + (err.message || ''), 'error')
@@ -143,10 +146,11 @@ export default function AdminSurveyBuilder() {
 
       // ── ADIM 2: Anket Kaydet (UPSERT via RPC)
       const surveyId = id || uuidv4()
-      const baseSlug = slugify(surveyData.title).substring(0, 50)
+      // Yeni anketler için kısa slug (başharfler + 4 haneli sayı)
+      // Gücelleme için mevcut slug korunur
       const finalSlug = id
-        ? (surveyData.slug || baseSlug)
-        : `${baseSlug}-${Math.random().toString(36).substr(2, 5)}`
+        ? (surveyData.slug || generateShortSlug(surveyData.title))
+        : generateShortSlug(surveyData.title)
 
       const { error: rpcError } = await httpRpc('save_survey_secure', {
         p_id: surveyId,

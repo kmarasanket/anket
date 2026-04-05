@@ -59,7 +59,7 @@ export function calcPercent(value: number, total: number): number {
   return Math.round((value / total) * 100)
 }
 
-// Slug oluştur
+// Slug oluştur (tam kelime - geriye dönük uyumluluk için korundu)
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -67,6 +67,30 @@ export function slugify(text: string): string {
     .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+// Kısa Slug Üreteci: Başharfler + 4 haneli numara
+// Örnek: "Kahramanmaraş Necip Fazil Şehir Hastanesi Anketi" → "knfsha-4721"
+export function generateShortSlug(title: string): string {
+  // Türkçe karakterleri dönüştür
+  const normalized = title
+    .replace(/ğ/gi, 'g').replace(/ü/gi, 'u').replace(/ş/gi, 's')
+    .replace(/ı/gi, 'i').replace(/İ/g, 'i').replace(/ö/gi, 'o').replace(/ç/gi, 'c')
+
+  // Kelimelerin baş harflerini al (max 8)
+  const initials = normalized
+    .trim()
+    .split(/\s+/)
+    .filter(word => word.length > 0)
+    .map(word => word[0].toLowerCase())
+    .filter(c => /[a-z]/.test(c))
+    .slice(0, 8)
+    .join('')
+
+  // 4 haneli rastgele numara (1000-9999)
+  const num = Math.floor(Math.random() * 9000) + 1000
+
+  return `${initials || 'anket'}-${num}`
 }
 
 // Bekle (ms)
