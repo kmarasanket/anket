@@ -105,7 +105,6 @@ export interface Database {
           started_at: string
           completed_at: string | null
           is_complete: boolean
-          partial_data: Json
           metadata: Json
         }
         Insert: Omit<Database['public']['Tables']['responses']['Row'], 'id' | 'started_at'>

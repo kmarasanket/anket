@@ -155,14 +155,18 @@ export default function PublicSurveyPage() {
       const ip = '127.0.0.1'
       const hashedIp = await hashIP(ip)
 
-      // Yanıtı kaydet ve geri dönen ID'yi al
+      // Yanıtı kaydet - metadata minimum tutulur (depolama tasarrufu)
+      const ua = navigator.userAgent
+      const browser = ua.includes('Chrome') ? 'ch' : ua.includes('Firefox') ? 'ff' : ua.includes('Safari') ? 'sf' : ua.includes('Edge') ? 'ed' : 'ot'
+      const isMobile = /Mobi|Android/i.test(ua) ? 1 : 0
+
       const { data: responseData, error: responseError } = await httpFrom('responses').insert({
         survey_id: survey.id,
         tenant_id: survey.tenant_id,
         session_token: sessionToken,
         ip_hash: hashedIp,
         is_complete: true,
-        metadata: { user_agent: navigator.userAgent }
+        metadata: { b: browser, m: isMobile }
       }, { returnData: true })
 
       if (responseError) throw responseError
@@ -171,7 +175,7 @@ export default function PublicSurveyPage() {
       const answersToInsert = Object.entries(answers).map(([question_id, answer]) => ({
         response_id: responseData[0].id,
         question_id,
-        answer: { value: answer }
+        answer: answer  // Düz değer saklanır, sarıcı obj yok
       }))
 
       if (answersToInsert.length > 0) {
