@@ -111,14 +111,20 @@ export default function AdminSurveysPage() {
             <div key={survey.id} className="card p-5 hover:border-dark-700 transition-colors">
               <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-lg font-semibold text-dark-50 truncate" title={survey.title}>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-dark-50 truncate min-w-0 flex-1" title={survey.title}>
                       {survey.title}
                     </h3>
-                    {getStatusBadge(survey.status)}
+                    <span className="shrink-0">{getStatusBadge(survey.status)}</span>
                   </div>
-                  <p className="text-sm text-dark-400 truncate mb-2">
+                  <p className="text-sm text-dark-400 mb-2 overflow-hidden" style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    wordBreak: 'break-word'
+                  }}>
                     {survey.description || 'Açıklama yok'}
                   </p>
                   <div className="flex items-center gap-4 text-xs text-dark-500">
