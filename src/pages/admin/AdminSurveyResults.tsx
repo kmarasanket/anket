@@ -429,7 +429,6 @@ export default function AdminSurveyResults() {
       </div>
 
       {activeTab === 'list' ? (
-        {/* Katılımcı Tablosu */}
         <div className="card">
           <div className="p-5 border-b border-dark-800 flex items-center gap-3">
             <LayoutList className="w-5 h-5 text-accent-400" />
@@ -493,7 +492,6 @@ export default function AdminSurveyResults() {
           )}
         </div>
       ) : (
-        {/* Seçenek Bazında Rapor (Print Area) */}
         <div className="card p-5">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-dark-100">Rapor Önizleme</h3>
