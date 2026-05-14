@@ -143,12 +143,13 @@ export default function AdminSurveyResults() {
     return String(raw)
   }
 
-  // Rapor Tablosu Verisi (Sadece "radio" soruları)
+  // Rapor Tablosu Verisi (Sadece "radio" ve "checkbox" soruları)
   const reportData = useMemo(() => {
-    const radioQuestions = questions.filter(q => q.type === 'radio')
-    const options = radioQuestions.length > 0 ? (radioQuestions[0].options || []) : []
+    const targetQuestions = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
+    // Sütun başlıkları: ilk uygun sorunun seçenekleri (örneğin Likert ölçeği seçenekleri)
+    const options = targetQuestions.length > 0 ? (targetQuestions[0].options || []) : []
     
-    const rows = radioQuestions.map(q => {
+    const rows = targetQuestions.map(q => {
       const counts: Record<string, number> = {}
       options.forEach((opt: string) => counts[opt] = 0)
       
@@ -166,13 +167,13 @@ export default function AdminSurveyResults() {
       options.forEach((opt: string) => totals[opt] += r.counts[opt])
     })
 
-    const grandTotal = radioQuestions.length * filteredResponses.length
+    const grandTotal = targetQuestions.length * filteredResponses.length
     const percentages: Record<string, string> = {}
     options.forEach((opt: string) => {
       percentages[opt] = grandTotal > 0 ? ((totals[opt] / grandTotal) * 100).toFixed(1) + '%' : '0%'
     })
 
-    return { radioQuestions, options, rows, totals, grandTotal, percentages }
+    return { targetQuestions, options, rows, totals, grandTotal, percentages }
   }, [questions, filteredResponses])
 
   const exportPDF = () => {
@@ -494,84 +495,112 @@ export default function AdminSurveyResults() {
       ) : (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-dark-100">Rapor Önizleme</h3>
+            <h3 className="font-bold text-dark-100 flex items-center gap-3">
+              <FileText className="w-5 h-5 text-primary-400" />
+              Rapor Önizleme
+              <span className="text-dark-400 font-normal text-xs bg-dark-800 px-2 py-1 rounded-md">A4 Dikey (Portrait)</span>
+            </h3>
             <div className="flex gap-3">
               <button onClick={exportReportExcel} className="btn-md btn-secondary gap-2 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30">
-                <FileSpreadsheet className="w-4 h-4" /> Tabloyu Excel İndir
+                <FileSpreadsheet className="w-4 h-4" /> Excel İndir
               </button>
-              <button onClick={exportPDF} className="btn-md btn-secondary gap-2 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30">
-                <FileText className="w-4 h-4" /> PDF Kaydet
+              <button onClick={exportPDF} className="btn-md btn-primary gap-2">
+                <Download className="w-4 h-4" /> PDF Olarak Kaydet
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto bg-white text-black p-8 rounded border border-dark-700" id="report-table-print-area">
-            <style>{`
-              #report-table {
-                font-family: Arial, sans-serif;
-                font-size: 11px;
-                width: 100%;
-                border-collapse: collapse;
-                color: black;
-              }
-              #report-table th, #report-table td {
-                border: 1px solid #000;
-                padding: 4px;
-                text-align: center;
-              }
-              #report-table .text-left { text-align: left; }
-              #report-table .font-bold { font-weight: bold; }
-              #report-table .header-info td { border: none; padding: 2px 0; text-align: left; }
-            `}</style>
-            
-            <table id="report-table">
-              <tbody>
-                <tr className="header-info"><td colSpan={reportData.options.length + 1} className="font-bold text-[14px]">Seçenek Bazında Verilen Cevap Sayısı ve Oranı</td></tr>
-                <tr className="header-info"><td colSpan={reportData.options.length + 1}>Anket Adı: {survey?.title}</td></tr>
-                <tr className="header-info"><td colSpan={reportData.options.length + 1}>Yıl/Ay: {selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</td></tr>
-                <tr className="header-info"><td colSpan={reportData.options.length + 1}>Hastane Adı: {tenant?.name || '-'}</td></tr>
-                <tr className="header-info"><td colSpan={reportData.options.length + 1}>İlgili Dönemde Anket Uygulanan Kişi Sayısı: {filteredResponses.length}</td></tr>
-                <tr><td colSpan={reportData.options.length + 1} style={{height: '10px', border: 'none'}}></td></tr>
+          {reportData.options.length === 0 ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Bu ankette Tek Seçimli (Radio) veya Çok Seçimli (Checkbox) soru bulunmuyor.</p>
+              <p className="text-dark-500 text-sm mt-2">Raporlama için seçenekli sorular gereklidir.</p>
+            </div>
+          ) : (
+            <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
+              <div 
+                id="report-table-print-area" 
+                className="bg-white text-black shadow-2xl relative"
+                style={{ width: '210mm', minHeight: '297mm', maxWidth: 'none', padding: '15mm' }}
+              >
+                <style>{`
+                  #report-table {
+                    font-family: Arial, sans-serif;
+                    font-size: 11px;
+                    width: 100%;
+                    border-collapse: collapse;
+                    color: black;
+                  }
+                  #report-table th, #report-table td {
+                    border: 1px solid #444;
+                    padding: 6px 4px;
+                    text-align: center;
+                    vertical-align: middle;
+                  }
+                  #report-table .text-left { text-align: left; }
+                  #report-table .font-bold { font-weight: bold; }
+                  #report-table .header-info td { border: none; padding: 2px 0; text-align: left; font-size: 12px; }
+                  #report-table th { background-color: #f3f4f6; font-weight: bold; }
+                  #report-table .bg-gray-100 { background-color: #f3f4f6 !important; }
+                  
+                  /* Satır hover efekti PDF'e yansımaz, sadece ekranda şık durur */
+                  @media screen {
+                    #report-table tr.hover-row:hover { background-color: #f9fafb; }
+                  }
+                `}</style>
                 
-                <tr>
-                  <th className="text-left bg-gray-100" style={{ width: '40%' }}>SORULAR</th>
-                  <th colSpan={reportData.options.length} className="bg-gray-100">Cevap Seçeneği (Kişi Sayısı)</th>
-                </tr>
-                <tr>
-                  <th></th>
-                  {reportData.options.map((opt: string, i: number) => (
-                    <th key={i} className="bg-gray-100">{opt}</th>
-                  ))}
-                </tr>
-                
-                {reportData.rows.map((row, i) => (
-                  <tr key={i}>
-                    <td className="text-left">{i + 1}. {row.question}</td>
-                    {reportData.options.map((opt: string, j: number) => (
-                      <td key={j}>{row.counts[opt]}</td>
+                <table id="report-table">
+                  <tbody>
+                    <tr className="header-info"><td colSpan={reportData.options.length + 1} className="font-bold text-[15px] pb-4 border-b border-black">Seçenek Bazında Verilen Cevap Sayısı ve Oranı</td></tr>
+                    <tr><td colSpan={reportData.options.length + 1} style={{height: '10px', border: 'none'}}></td></tr>
+                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>Anket Adı: <span className="font-bold">{survey?.title}</span></td></tr>
+                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>Yıl/Ay: <span className="font-bold">{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</span></td></tr>
+                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>Hastane Adı: <span className="font-bold">{tenant?.name || '-'}</span></td></tr>
+                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>İlgili Dönemde Anket Uygulanan Kişi Sayısı: <span className="font-bold">{filteredResponses.length}</span></td></tr>
+                    <tr><td colSpan={reportData.options.length + 1} style={{height: '15px', border: 'none'}}></td></tr>
+                    
+                    <tr>
+                      <th className="text-left bg-gray-100" style={{ width: '45%' }}>SORULAR</th>
+                      <th colSpan={reportData.options.length} className="bg-gray-100">Cevap Seçeneği (Kişi Sayısı)</th>
+                    </tr>
+                    <tr>
+                      <th className="bg-gray-100 border-t-0"></th>
+                      {reportData.options.map((opt: string, i: number) => (
+                        <th key={i} className="bg-gray-100">{opt}</th>
+                      ))}
+                    </tr>
+                    
+                    {reportData.rows.map((row, i) => (
+                      <tr key={i} className="hover-row">
+                        <td className="text-left">{i + 1}. {row.question}</td>
+                        {reportData.options.map((opt: string, j: number) => (
+                          <td key={j}>{row.counts[opt]}</td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-                
-                <tr>
-                  <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Toplam Cevap Sayısı ({reportData.options.join(', ')} Toplamı)</td>
-                  {reportData.options.map((opt: string, i: number) => (
-                    <td key={i} className="font-bold bg-gray-100">{reportData.totals[opt]}</td>
-                  ))}
-                </tr>
-                <tr>
-                  <td className="text-left font-bold bg-gray-100">Toplam Cevap Sayısı (Anketteki Soru Sayısı X Anket Uygulanan Kişi Sayısı)</td>
-                  <td colSpan={reportData.options.length} className="font-bold bg-gray-100">{reportData.grandTotal}</td>
-                </tr>
-                <tr>
-                  <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Cevap Oranı (Her Seçenekte Verilen Toplam Cevap Sayısı / Toplam Cevap Sayısı)</td>
-                  {reportData.options.map((opt: string, i: number) => (
-                    <td key={i} className="font-bold bg-gray-100">{reportData.percentages[opt]}</td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                    
+                    <tr><td colSpan={reportData.options.length + 1} style={{height: '5px', border: 'none'}}></td></tr>
+
+                    <tr>
+                      <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Toplam Cevap Sayısı<br/><span className="font-normal text-[10px]">({reportData.options.join(', ')} Toplamı)</span></td>
+                      {reportData.options.map((opt: string, i: number) => (
+                        <td key={i} className="font-bold bg-gray-100">{reportData.totals[opt]}</td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="text-left font-bold bg-gray-100">Toplam Cevap Sayısı<br/><span className="font-normal text-[10px]">(Anketteki Soru Sayısı X Anket Uygulanan Kişi Sayısı)</span></td>
+                      <td colSpan={reportData.options.length} className="font-bold bg-gray-100">{reportData.grandTotal}</td>
+                    </tr>
+                    <tr>
+                      <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Cevap Oranı<br/><span className="font-normal text-[10px]">(Her Seçenekte Verilen Toplam Cevap Sayısı / Toplam Cevap Sayısı)</span></td>
+                      {reportData.options.map((opt: string, i: number) => (
+                        <td key={i} className="font-bold bg-gray-100">{reportData.percentages[opt]}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

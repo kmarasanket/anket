@@ -23,7 +23,7 @@ export default function AdminDashboard() {
         const surveysRes = await qSurveys.execute()
 
         // Sadece bu kurumun tamamlanan yanıtları
-        const qCompleted = httpFrom('responses').select('id')
+        const qCompleted = httpFrom('responses').select('id, survey_id')
         qCompleted.eq('tenant_id', tenant.id)
         qCompleted.eq('is_complete', 'true')
         const completedRes = await qCompleted.execute()
@@ -34,15 +34,22 @@ export default function AdminDashboard() {
         const allRes = await qAll.execute()
 
         const active = surveysRes.data?.length || 0
-        const completed = completedRes.data?.length || 0
+        const completedList = completedRes.data || []
         const total = allRes.data?.length || 0
 
         setStats({
           activeSurveys: active,
-          totalResponses: completed,
-          completionRate: total ? Math.round((completed / total) * 100) : 0
+          totalResponses: completedList.length,
+          completionRate: total ? Math.round((completedList.length / total) * 100) : 0
         })
-        setRecentSurveys(surveysRes.data?.slice(0, 5) || [])
+
+        const activeSurveys = surveysRes.data || []
+        const surveysWithCounts = activeSurveys.map((s: any) => ({
+          ...s,
+          real_response_count: completedList.filter((r: any) => r.survey_id === s.id).length
+        }))
+
+        setRecentSurveys(surveysWithCounts.slice(0, 5))
       } catch (err) {
         console.error('Dashboard yüklenemedi:', err)
       } finally {
@@ -139,7 +146,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right hidden sm:block">
-                      <p className="text-sm font-semibold text-dark-200">{survey.response_count || 0}</p>
+                      <p className="text-sm font-semibold text-dark-200">{survey.real_response_count || 0}</p>
                       <p className="text-xs text-dark-500">Yanıt</p>
                     </div>
                     <Link to={`/admin/anketler/${survey.id}/sonuclar`} className="p-2 bg-dark-800 text-dark-300 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors">
