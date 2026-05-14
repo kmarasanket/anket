@@ -12,9 +12,12 @@ export default function AdminSurveyResults() {
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
 
-  // Tarih filtresi
+  // Filtre modu: 'range' = tarih aralığı, 'month' = ay/yıl seçimi
+  const [filterMode, setFilterMode] = useState<'range' | 'month'>('month')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [selectedYear, setSelectedYear] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState('')
 
   useEffect(() => {
     const loadResults = async () => {
@@ -50,6 +53,60 @@ export default function AdminSurveyResults() {
     }
     if (id) loadResults()
   }, [id])
+
+  // Yanıtlardan mevcut yılları çıkar (dropdown için)
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    responses.forEach(r => {
+      if (r.completed_at) years.add(new Date(r.completed_at).getFullYear())
+    })
+    return Array.from(years).sort((a, b) => b - a)
+  }, [responses])
+
+  // Seçili yıla ait ayları çıkar
+  const availableMonths = useMemo(() => {
+    if (!selectedYear) return []
+    const months = new Set<number>()
+    responses.forEach(r => {
+      if (r.completed_at) {
+        const d = new Date(r.completed_at)
+        if (d.getFullYear() === Number(selectedYear)) months.add(d.getMonth())
+      }
+    })
+    return Array.from(months).sort((a, b) => a - b)
+  }, [responses, selectedYear])
+
+  const MONTH_NAMES = [
+    'Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+    'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'
+  ]
+
+  // Ay/Yıl seçilince tarih aralığını otomatik doldur
+  const applyMonthFilter = (year: string, month: string) => {
+    if (!year) { setDateFrom(''); setDateTo(''); return }
+    const y = Number(year)
+    const m = month !== '' ? Number(month) : null
+    if (m !== null) {
+      const from = new Date(y, m, 1)
+      const to = new Date(y, m + 1, 0)
+      setDateFrom(from.toISOString().split('T')[0])
+      setDateTo(to.toISOString().split('T')[0])
+    } else {
+      setDateFrom(`${y}-01-01`)
+      setDateTo(`${y}-12-31`)
+    }
+  }
+
+  const handleYearChange = (year: string) => {
+    setSelectedYear(year)
+    setSelectedMonth('')
+    applyMonthFilter(year, '')
+  }
+
+  const handleMonthChange = (month: string) => {
+    setSelectedMonth(month)
+    applyMonthFilter(selectedYear, month)
+  }
 
   // Tarih filtresi uygulanmış yanıtlar
   const filteredResponses = useMemo(() => {
@@ -181,43 +238,107 @@ export default function AdminSurveyResults() {
         </div>
       </div>
 
-      {/* Tarih Filtresi */}
-      <div className="card p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <Filter className="w-4 h-4 text-primary-400" />
-          <h3 className="font-semibold text-dark-100">Tarih Aralığı Filtresi</h3>
+      {/* Filtreleme */}
+      <div className="card">
+        <div className="p-5 border-b border-dark-800 flex items-center gap-3">
+          <Filter className="w-5 h-5 text-primary-400" />
+          <h3 className="font-semibold text-dark-100 flex-1">Sonuç Filtreleme</h3>
           {isFiltered && (
-            <button onClick={clearFilter} className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
+            <button onClick={clearFilter} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
               <X className="w-3 h-3" /> Filtreyi Temizle
             </button>
           )}
         </div>
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <label className="block text-xs text-dark-400 mb-1.5">Başlangıç Tarihi</label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)}
-                className="input w-full pl-9 bg-dark-950 border-dark-800"
-              />
-            </div>
+        
+        <div className="p-5 border-b border-dark-800 bg-dark-900/50">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilterMode('month')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                filterMode === 'month' ? 'bg-primary-500 text-white' : 'text-dark-300 hover:bg-dark-800'
+              }`}
+            >
+              Ay / Yıl Seçimi
+            </button>
+            <button
+              onClick={() => setFilterMode('range')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                filterMode === 'range' ? 'bg-primary-500 text-white' : 'text-dark-300 hover:bg-dark-800'
+              }`}
+            >
+              Tarih Aralığı
+            </button>
           </div>
-          <div className="flex-1">
-            <label className="block text-xs text-dark-400 mb-1.5">Bitiş Tarihi</label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={e => setDateTo(e.target.value)}
-                min={dateFrom}
-                className="input w-full pl-9 bg-dark-950 border-dark-800"
-              />
+        </div>
+
+        <div className="p-5">
+          {filterMode === 'month' ? (
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="block text-xs text-dark-400 mb-1.5">Yıl Seçin</label>
+                <select
+                  value={selectedYear}
+                  onChange={e => handleYearChange(e.target.value)}
+                  className="input w-full bg-dark-950 border-dark-800 h-10"
+                >
+                  <option value="">Tümü</option>
+                  {availableYears.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-dark-400 mb-1.5">Ay Seçin</label>
+                <select
+                  value={selectedMonth}
+                  onChange={e => handleMonthChange(e.target.value)}
+                  disabled={!selectedYear}
+                  className="input w-full bg-dark-950 border-dark-800 h-10 disabled:opacity-50"
+                >
+                  <option value="">Tüm Aylar</option>
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>{MONTH_NAMES[m]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="block text-xs text-dark-400 mb-1.5">Başlangıç Tarihi</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => {
+                      setDateFrom(e.target.value)
+                      setSelectedYear('')
+                      setSelectedMonth('')
+                    }}
+                    className="input w-full pl-9 bg-dark-950 border-dark-800"
+                  />
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-dark-400 mb-1.5">Bitiş Tarihi</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={e => {
+                      setDateTo(e.target.value)
+                      setSelectedYear('')
+                      setSelectedMonth('')
+                    }}
+                    min={dateFrom}
+                    className="input w-full pl-9 bg-dark-950 border-dark-800"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
