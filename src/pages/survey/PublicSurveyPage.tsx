@@ -138,8 +138,8 @@ export default function PublicSurveyPage() {
 
   const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
     setAnswers(prev => {
-      const current = Array.isArray(prev[questionId]) ? prev[questionId] : []
-      const updated = checked ? [...current, option] : current.filter((item: string) => item !== option)
+      // Tek seçim: yeni seçenek işaretlenince diğerleri temizlenir
+      const updated = checked ? [option] : []
       if (missingId === questionId) setMissingId(null)
       return { ...prev, [questionId]: updated }
     })
