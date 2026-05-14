@@ -185,6 +185,7 @@ export default function PublicSurveyPage() {
         session_token: sessionToken,
         ip_hash: hashedIp,
         is_complete: true,
+        completed_at: new Date().toISOString(),
         metadata: { b: browser, m: isMobile }
       }, { returnData: true })
 
