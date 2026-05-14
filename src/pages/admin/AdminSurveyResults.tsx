@@ -204,7 +204,7 @@ export default function AdminSurveyResults() {
     const element = document.getElementById('report-table-print-area')
     if (!element) return
     const opt = {
-      margin:       10,
+      margin:       0,
       filename:     `${survey?.title || 'Rapor'}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 2 },
@@ -544,7 +544,7 @@ export default function AdminSurveyResults() {
               <div 
                 id="report-table-print-area" 
                 className="bg-white text-black shadow-2xl relative"
-                style={{ width: '210mm', minHeight: '297mm', maxWidth: 'none', padding: '15mm' }}
+                style={{ width: '210mm', minHeight: '297mm', maxWidth: 'none', padding: '10mm', boxSizing: 'border-box' }}
               >
                 <style>{`
                   #report-table {
