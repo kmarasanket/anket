@@ -12,21 +12,25 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!tenant?.id) return
     const loadData = async () => {
       try {
-        // Aktif anketler
+        // Sadece bu kurumun aktif anketleri
         const qSurveys = httpFrom('surveys').select('*')
+        qSurveys.eq('tenant_id', tenant.id)
         qSurveys.eq('status', 'active')
         qSurveys.order('created_at', { ascending: false })
         const surveysRes = await qSurveys.execute()
 
-        // Tamamlanan yanıtlar
+        // Sadece bu kurumun tamamlanan yanıtları
         const qCompleted = httpFrom('responses').select('id')
+        qCompleted.eq('tenant_id', tenant.id)
         qCompleted.eq('is_complete', 'true')
         const completedRes = await qCompleted.execute()
 
-        // Tüm yanıtlar
+        // Sadece bu kurumun tüm yanıtları
         const qAll = httpFrom('responses').select('id')
+        qAll.eq('tenant_id', tenant.id)
         const allRes = await qAll.execute()
 
         const active = surveysRes.data?.length || 0
@@ -46,7 +50,7 @@ export default function AdminDashboard() {
       }
     }
     loadData()
-  }, [])
+  }, [tenant?.id])
 
   return (
     <div className="animate-in space-y-8">

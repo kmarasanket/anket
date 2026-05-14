@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { 
-  Save, ArrowLeft, Plus, Trash2, 
+  Save, ArrowLeft, Plus, Trash2, Copy,
   AlignLeft, CheckSquare, CircleDot, Star, Calendar, Baseline
 } from 'lucide-react'
 import { httpFrom, httpRpc, getStoredToken } from '../../lib/supabaseHttp'
@@ -122,6 +122,21 @@ export default function AdminSurveyBuilder() {
   const removeQuestion = (index: number) => {
     const updated = [...questions]
     updated.splice(index, 1)
+    setQuestions(updated)
+  }
+
+  // Soruyu klonla: tıkladığın sorunun kopyasini hemen altına ekle
+  const cloneQuestion = (index: number) => {
+    const original = questions[index]
+    const clone = {
+      ...original,
+      id: uuidv4(),          // Yeni benzersiz ID
+      _isNew: true,          // Kaydedilmemiş yeni soru olarak işaretle
+      options: original.options ? [...original.options] : null,
+      order_index: index + 1 // Bir sonraki sıraya yerleştir
+    }
+    const updated = [...questions]
+    updated.splice(index + 1, 0, clone)  // Orijinalin hemen altına ekle
     setQuestions(updated)
   }
 
@@ -329,7 +344,7 @@ export default function AdminSurveyBuilder() {
               <div className="border border-dark-700 rounded w-full h-16 mt-4 p-2 text-dark-500 text-sm ml-2 bg-dark-950">Uzun yanıt metni</div>
             )}
 
-            {/* Soru Alt Bar (Zorunlu, Sil) */}
+            {/* Soru Alt Bar (Zorunlu, Klonla, Sil) */}
             <div className="flex items-center justify-end gap-4 mt-6 pt-4 border-t border-dark-800">
               <label className="flex items-center gap-2 cursor-pointer">
                 <span className="text-sm text-dark-400 font-medium">Gerekli</span>
@@ -341,6 +356,14 @@ export default function AdminSurveyBuilder() {
                 />
               </label>
               <div className="w-px h-6 bg-dark-700" />
+              <button
+                onClick={() => cloneQuestion(qIndex)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-dark-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                title="Soruyu Klonla"
+              >
+                <Copy className="w-4 h-4" />
+                <span className="hidden sm:inline">Klonla</span>
+              </button>
               <button onClick={() => removeQuestion(qIndex)} className="p-2 text-dark-400 hover:text-red-400 transition-colors" title="Soruyu Sil">
                 <Trash2 className="w-5 h-5" />
               </button>
