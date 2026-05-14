@@ -35,7 +35,7 @@ export default function AdminSurveyBuilder() {
   const [surveyData, setSurveyData] = useState({
     title: '',
     description: '',
-    status: 'draft' as 'draft' | 'active' | 'closed',
+    status: 'active' as 'active' | 'closed',
     welcome_message: '',
     thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.',
     slug: ''
@@ -236,12 +236,11 @@ export default function AdminSurveyBuilder() {
             onChange={e => setSurveyData({...surveyData, status: e.target.value as any})}
             className="input py-1.5 h-auto text-sm bg-dark-950"
           >
-            <option value="draft">Taslak</option>
             <option value="active">Aktif (Yayında)</option>
-            <option value="closed">Kapalı</option>
+            <option value="closed">Pasif (Kapalı)</option>
           </select>
           <button onClick={handleSave} disabled={saving} className="btn-md btn-primary">
-            <Save className="w-4 h-4" /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
+            <Save className="w-4 h-4" /> {saving ? 'Kaydediliyor...' : 'Kaydet (Güncel)'}
           </button>
         </div>
       </div>

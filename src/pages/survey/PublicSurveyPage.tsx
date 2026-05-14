@@ -228,8 +228,8 @@ export default function PublicSurveyPage() {
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <div className="w-8 h-8 bg-red-500 rounded-full" />
         </div>
-        <h1 className="text-2xl font-bold text-dark-50 mb-2">Anket Kapalı</h1>
-        <p className="text-dark-400">Bu anket artık yanıt kabul etmiyor. İlginiz için teşekkür ederiz.</p>
+        <h1 className="text-2xl font-bold text-dark-50 mb-2">Anket Pasif</h1>
+        <p className="text-dark-400">Bu anket şu an yanıt alımına kapalıdır. İlginiz için teşekkür ederiz.</p>
       </div>
     </div>
   )

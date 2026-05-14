@@ -377,7 +377,7 @@ export default function AdminSurveyResults() {
           <div>
             <p className="text-sm text-dark-400">Durum</p>
             <p className="text-xl font-bold text-dark-50">
-              {survey.status === 'active' ? 'Yayında' : survey.status === 'closed' ? 'Kapalı' : 'Taslak'}
+              {survey.status === 'active' ? 'Yayında' : 'Pasif'}
             </p>
           </div>
         </div>

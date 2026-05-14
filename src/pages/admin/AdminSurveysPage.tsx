@@ -79,9 +79,8 @@ export default function AdminSurveysPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active': return <span className="badge-success">Aktif</span>
-      case 'draft': return <span className="badge-warning">Taslak</span>
-      case 'closed': return <span className="badge-danger">Kapalı</span>
-      default: return null
+      case 'closed': return <span className="badge-danger">Pasif</span>
+      default: return <span className="badge-warning">Pasif</span>
     }
   }
 
