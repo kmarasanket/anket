@@ -161,6 +161,15 @@ export default function AdminSurveyResults() {
     })
   }, [responses, dateFrom, dateTo])
 
+  const findResponseAnswer = (response: any, question: any) => {
+    if (!response.response_answers || response.response_answers.length === 0) return null
+    const ansById = response.response_answers.find((a: any) => a.question_id === question.id)
+    if (ansById) return ansById
+    const qIdx = questions.findIndex(q => q.id === question.id)
+    if (qIdx !== -1 && response.response_answers[qIdx]) return response.response_answers[qIdx]
+    return null
+  }
+
   // Sorudan cevap değerini oku (plain value veya {value:x} formatı desteklenir)
   const getAnswerValue = (answer: any): string => {
     if (answer == null) return '-'
@@ -212,7 +221,7 @@ export default function AdminSurveyResults() {
       options.forEach((opt: string) => counts[opt] = 0)
       
       filteredResponses.forEach(r => {
-        const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
+        const ans = findResponseAnswer(r, q)
         const val = getAnswerValue(ans)
         if (options.includes(val)) counts[val]++
       })
@@ -307,7 +316,7 @@ export default function AdminSurveyResults() {
       ]
 
       dataQuestions.forEach(q => {
-        const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
+        const ans = findResponseAnswer(r, q)
         row.push(getAnswerValue(ans))
       })
 

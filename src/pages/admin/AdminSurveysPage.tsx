@@ -193,8 +193,8 @@ export default function AdminSurveysPage() {
       {/* Share Modal */}
       {shareModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-dark-900 border border-dark-700 w-full max-w-sm rounded-2xl shadow-xl flex flex-col p-6">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-sm rounded-2xl shadow-xl flex flex-col p-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-6 shrink-0">
               <h3 className="font-semibold text-lg text-dark-100 flex items-center gap-2">
                 <Share2 className="w-5 h-5 text-primary-400" />
                 Anketi Paylaş

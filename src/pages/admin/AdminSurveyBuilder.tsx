@@ -179,17 +179,22 @@ export default function AdminSurveyBuilder() {
       })
       if (rpcError) throw rpcError
 
-      // ── ADIM 3: Soruları Senkronize Et (raw fetch)
-      // Önce mevcut soruları sil
-      const { error: delError } = await httpFrom('questions')
-        .delete()
-        .eq('survey_id', surveyId)
-        .execute()
-      if (delError) throw delError
+      // ── ADIM 3: Soruları Senkronize Et
+      // Mevcut soruları çek (IDsini bildiklerimizi güncellemek, bilmediklerimizi silmek için)
+      const { data: dbQuestions } = await httpFrom('questions').select('id').eq('survey_id', surveyId).execute()
+      const dbIds = (dbQuestions || []).map((q: any) => q.id)
+      const stateIds = questions.map(q => q.id).filter(Boolean)
+      
+      // Silinenleri sil
+      const toDelete = dbIds.filter(id => !stateIds.includes(id))
+      for (const delId of toDelete) {
+        await httpFrom('questions').delete().eq('id', delId).execute()
+      }
 
-      // Yeni soruları ekle
+      // Mevcutları/Yeni olanları kaydet (Upsert)
       if (questions.length > 0) {
-        const questionsToInsert = questions.map((q, idx) => ({
+        const questionsToSave = questions.map((q, idx) => ({
+          id: q.id || uuidv4(),
           survey_id: surveyId,
           type: q.type,
           title: q.title || 'İsimsiz Soru',
@@ -198,8 +203,10 @@ export default function AdminSurveyBuilder() {
           order_index: idx,
           options: q.type === 'radio' || q.type === 'checkbox' ? q.options : null
         }))
-        const { error: insError } = await httpFrom('questions').insert(questionsToInsert)
-        if (insError) throw insError
+        
+        // Upsert işlemi
+        const { error: upsError } = await httpFrom('questions').upsert(questionsToSave, 'id')
+        if (upsError) throw upsError
       }
 
       addNotification('Anket başarıyla kaydedildi.', 'success')
