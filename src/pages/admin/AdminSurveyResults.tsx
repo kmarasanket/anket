@@ -277,12 +277,14 @@ export default function AdminSurveyResults() {
     URL.revokeObjectURL(url)
   }
 
-  // Raw Excel / CSV indir
+  // Katılımcı Listesini normal Excel (XLS) olarak indir
   const downloadExcel = () => {
     const dataQuestions = questions.filter(q => q.type !== 'section')
-    const BOM = '\ufeff'
     const headers = ['#', 'Tarih/Saat', 'Ay/Yıl', ...dataQuestions.map(q => q.title)]
-    let csv = BOM + headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',') + '\n'
+    
+    let html = '<table border="1"><thead><tr>'
+    headers.forEach(h => html += `<th style="background-color: #f3f4f6; font-weight: bold;">${h}</th>`)
+    html += '</tr></thead><tbody>'
 
     filteredResponses.forEach((r, idx) => {
       const dateStr = r.completed_at ? formatDateTime(r.completed_at) : '-'
@@ -290,23 +292,27 @@ export default function AdminSurveyResults() {
         ? new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' }).format(new Date(r.completed_at))
         : '-'
 
-      const row: string[] = [
-        String(filteredResponses.length - idx),
-        dateStr,
-        monthYear,
-        ...dataQuestions.map(q => {
-          const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
-          return `"${getAnswerValue(ans).replace(/"/g, '""')}"`
-        })
-      ]
-      csv += row.join(',') + '\n'
+      html += '<tr>'
+      html += `<td>${filteredResponses.length - idx}</td>`
+      html += `<td>${dateStr}</td>`
+      html += `<td>${monthYear}</td>`
+      
+      dataQuestions.forEach(q => {
+        const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
+        html += `<td>${getAnswerValue(ans)}</td>`
+      })
+      html += '</tr>'
     })
+    
+    html += '</tbody></table>'
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob([`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body>${html}</body></html>`], {
+      type: 'application/vnd.ms-excel'
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${survey?.title || 'Anket'}-Sonuclar.csv`
+    a.download = `${survey?.title || 'Anket'}-Katilimcilar.xls`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -723,20 +729,20 @@ export default function AdminSurveyResults() {
                 <style>{`
                   #score-report-table {
                     font-family: Arial, sans-serif;
-                    font-size: 11px;
+                    font-size: 9px;
                     width: 100%;
                     border-collapse: collapse;
                     color: black;
                   }
                   #score-report-table th, #score-report-table td {
                     border: 1px solid #444;
-                    padding: 6px 4px;
+                    padding: 4px 2px;
                     text-align: center;
                     vertical-align: middle;
                   }
                   #score-report-table .text-left { text-align: left; }
                   #score-report-table .font-bold { font-weight: bold; }
-                  #score-report-table .header-info td { border: none; padding: 2px 0; text-align: left; font-size: 12px; }
+                  #score-report-table .header-info td { border: none; padding: 2px 0; text-align: left; font-size: 11px; }
                   #score-report-table th { background-color: #f3f4f6; font-weight: bold; }
                   #score-report-table .bg-gray-100 { background-color: #f3f4f6 !important; }
                 `}</style>
