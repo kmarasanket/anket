@@ -227,6 +227,7 @@ export default function AdminSurveysPage() {
             </div>
             
             <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 rounded-xl mb-6 relative" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
+              <img src="/logo_ism.png" alt="Logo" className="h-24 w-auto object-contain mb-2" />
               <p className="text-black font-bold text-center text-lg leading-tight w-full break-words">{shareModal.title}</p>
               <QRCodeCanvas value={shareModal.link} size={220} level={"H"} className="mt-2" />
               <p className="text-black/60 text-xs text-center mt-4">Telefonunuzun kamerasını okutarak ankete katılabilirsiniz.</p>

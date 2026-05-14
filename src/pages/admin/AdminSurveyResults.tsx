@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import * as XLSX from 'xlsx'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
@@ -47,20 +48,41 @@ export default function AdminSurveyResults() {
         qQuestions.eq('survey_id', id!)
         qQuestions.order('order_index', { ascending: true })
 
-        const qResp = httpFrom('responses').select('*, response_answers(*)')
+        // 1. Önce anketi ve soruları al
+        const [surveyRes, questionsRes] = await Promise.all([
+          qSurvey.single().execute(),
+          qQuestions.execute()
+        ])
+
+        // 2. Yanıtları al (Join yerine düz çekip sonra kendimiz eşleştireceğiz - Daha güvenli)
+        const qResp = httpFrom('responses').select('*')
         qResp.eq('survey_id', id!)
         qResp.eq('is_complete', 'true')
         qResp.order('completed_at', { ascending: false })
+        
+        const responsesRes = await qResp.execute()
+        const rawResponses = responsesRes.data || []
 
-        const [surveyRes, questionsRes, responsesRes] = await Promise.all([
-          qSurvey.single().execute(),
-          qQuestions.execute(),
-          qResp.execute()
-        ])
+        // 3. Eğer yanıt varsa, bu yanıtlara ait tüm cevapları tek seferde çek
+        let enrichedResponses = rawResponses
+        if (rawResponses.length > 0) {
+          const responseIds = rawResponses.map((r: any) => r.id)
+          const qAns = httpFrom('response_answers').select('*')
+          qAns.in('response_id', responseIds)
+          
+          const answersRes = await qAns.execute()
+          const allAnswers = answersRes.data || []
+
+          // Cevapları yanıtlarla eşleştir
+          enrichedResponses = rawResponses.map((r: any) => ({
+            ...r,
+            response_answers: allAnswers.filter((a: any) => a.response_id === r.id)
+          }))
+        }
 
         setSurvey(surveyRes.data)
         setQuestions(questionsRes.data || [])
-        setResponses(responsesRes.data || [])
+        setResponses(enrichedResponses)
       } catch (err) {
         console.error('Sonuçlar yüklenemedi:', err)
       } finally {
@@ -263,18 +285,8 @@ export default function AdminSurveyResults() {
   const exportReportExcel = () => {
     const table = document.getElementById('report-table')
     if (!table) return
-    const html = table.outerHTML
-    const blob = new Blob([`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body>${html}</body></html>`], {
-      type: 'application/vnd.ms-excel'
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${survey?.title || 'Rapor'}.xls`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    const wb = XLSX.utils.table_to_book(table)
+    XLSX.writeFile(wb, `${survey?.title || 'Rapor'}.xlsx`)
   }
 
   // Katılımcı Listesini normal Excel (XLS) olarak indir
@@ -282,41 +294,30 @@ export default function AdminSurveyResults() {
     const dataQuestions = questions.filter(q => q.type !== 'section')
     const headers = ['#', 'Tarih/Saat', 'Ay/Yıl', ...dataQuestions.map(q => q.title)]
     
-    let html = '<table border="1"><thead><tr>'
-    headers.forEach(h => html += `<th style="background-color: #f3f4f6; font-weight: bold;">${h}</th>`)
-    html += '</tr></thead><tbody>'
-
-    filteredResponses.forEach((r, idx) => {
+    const rows = filteredResponses.map((r, idx) => {
       const dateStr = r.completed_at ? formatDateTime(r.completed_at) : '-'
       const monthYear = r.completed_at
         ? new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' }).format(new Date(r.completed_at))
         : '-'
 
-      html += '<tr>'
-      html += `<td>${filteredResponses.length - idx}</td>`
-      html += `<td>${dateStr}</td>`
-      html += `<td>${monthYear}</td>`
-      
+      const row = [
+        filteredResponses.length - idx,
+        dateStr,
+        monthYear
+      ]
+
       dataQuestions.forEach(q => {
         const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
-        html += `<td>${getAnswerValue(ans)}</td>`
+        row.push(getAnswerValue(ans))
       })
-      html += '</tr>'
-    })
-    
-    html += '</tbody></table>'
 
-    const blob = new Blob([`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body>${html}</body></html>`], {
-      type: 'application/vnd.ms-excel'
+      return row
     })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${survey?.title || 'Anket'}-Katilimcilar.xls`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Katılımcılar")
+    XLSX.writeFile(wb, `${survey?.title || 'Anket'}-Katilimcilar.xlsx`)
   }
 
   const clearFilter = () => { setDateFrom(''); setDateTo('') }
