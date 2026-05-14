@@ -273,12 +273,12 @@ export default function PublicSurveyPage() {
             <div className="mb-8 space-y-2">
                 <div className="flex justify-between text-xs text-dark-400 font-medium">
                     <span>Bölüm {currentPage + 1} / {pages.length}</span>
-                    <span>%{Math.round(((currentPage + 1) / pages.length) * 100)} Tamamlandı</span>
+                    <span>%{Math.round((currentPage / pages.length) * 100)} Tamamlandı</span>
                 </div>
                 <div className="h-1.5 w-full bg-dark-800 rounded-full overflow-hidden">
                     <div 
                         className="h-full bg-primary-500 transition-all duration-500 ease-out"
-                        style={{ width: `${((currentPage + 1) / pages.length) * 100}%` }}
+                        style={{ width: `${(currentPage / pages.length) * 100}%` }}
                     />
                 </div>
             </div>
