@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, QrCode, X, Download } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, QrCode, X, Download, Share2 } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
 import { QRCodeCanvas } from 'qrcode.react'
 import { httpFrom } from '../../lib/supabaseHttp'
@@ -10,12 +10,11 @@ import { useNotificationStore } from '../../stores/notificationStore'
 import type { Survey } from '../../lib/database.types'
 
 export default function AdminSurveysPage() {
-  const { tenant } = useAuthStore()
-  const [surveys, setSurveys] = useState<Survey[]>([])
+  const { tenant, profile } = useAuthStore()
+  const [surveys, setSurveys] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [qrModal, setQrModal] = useState<{isOpen: boolean, link: string, title: string}>({isOpen: false, link: '', title: ''})
+  const [shareModal, setShareModal] = useState<{isOpen: boolean, link: string, title: string}>({isOpen: false, link: '', title: ''})
   const { addNotification } = useNotificationStore()
 
   const fetchSurveys = async () => {
@@ -27,7 +26,21 @@ export default function AdminSurveysPage() {
       q.order('created_at', { ascending: false })
       const { data, error } = await q.execute()
       if (error) throw error
-      setSurveys(data || [])
+      
+      const qResp = httpFrom('responses').select('survey_id')
+      qResp.eq('tenant_id', tenant.id)
+      qResp.eq('is_complete', 'true')
+      const respData = await qResp.execute()
+      
+      const counts: Record<string, number> = {}
+      if (respData.data) {
+        respData.data.forEach((r: any) => {
+          counts[r.survey_id] = (counts[r.survey_id] || 0) + 1
+        })
+      }
+      
+      const withCounts = data?.map((s: any) => ({ ...s, real_response_count: counts[s.id] || 0 })) || []
+      setSurveys(withCounts)
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
     } finally {
@@ -43,12 +56,11 @@ export default function AdminSurveysPage() {
     s.title.toLowerCase().includes(search.toLowerCase())
   )
 
-  const handleCopyLink = (slug: string, id: string) => {
+  const handleShareClick = (slug: string, title: string) => {
     const url = `${window.location.origin}/s/${slug}`
     navigator.clipboard.writeText(url)
-    setCopiedId(id)
-    addNotification('Anket linki kopyalandı.', 'success')
-    setTimeout(() => setCopiedId(null), 2000)
+    addNotification('Anket linki otomatik kopyalandı.', 'success')
+    setShareModal({ isOpen: true, link: url, title })
   }
 
   const handleDelete = async (id: string, title: string) => {
@@ -133,32 +145,18 @@ export default function AdminSurveysPage() {
                   <div className="flex items-center gap-4 text-xs text-dark-500">
                     <span>Oluşturulma: {formatDate(survey.created_at)}</span>
                     <span className="w-1 h-1 rounded-full bg-dark-700" />
-                    <span>{survey.response_count || 0} Yanıt</span>
+                    <span>{survey.real_response_count || 0} Yanıt</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 w-full md:w-auto shrink-0 border-t border-dark-800 pt-4 md:border-0 md:pt-0 mt-2 md:mt-0">
                   
                   <button 
-                    onClick={() => handleCopyLink(survey.slug, survey.id)}
+                    onClick={() => handleShareClick(survey.slug, survey.title)}
                     className="btn-sm btn-ghost group relative flex-1 md:flex-none justify-center"
                   >
-                    {copiedId === survey.id ? (
-                      <span className="text-secondary-400 text-xs font-semibold">Kopyalandı!</span>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        <span className="hidden md:inline md:text-xs opacity-0 group-hover:opacity-100 absolute -top-8 px-2 py-1 bg-dark-800 rounded text-dark-100 transition-opacity">Link Kopyala</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button 
-                    onClick={() => setQrModal({ isOpen: true, link: `${window.location.origin}/s/${survey.slug}`, title: survey.title })}
-                    className="btn-sm btn-ghost group relative flex-1 md:flex-none justify-center"
-                  >
-                    <QrCode className="w-4 h-4" />
-                    <span className="hidden md:inline md:text-xs opacity-0 group-hover:opacity-100 absolute -top-8 px-2 py-1 bg-dark-800 rounded text-dark-100 transition-opacity">QR Kod</span>
+                    <Share2 className="w-4 h-4" />
+                    <span className="hidden md:inline md:text-xs opacity-0 group-hover:opacity-100 absolute -top-8 px-2 py-1 bg-dark-800 rounded text-dark-100 transition-opacity">Paylaş / QR</span>
                   </button>
 
                   <a 
@@ -178,9 +176,11 @@ export default function AdminSurveysPage() {
                     <Edit2 className="w-4 h-4" /> <span className="hidden md:inline">Düzenle</span>
                   </Link>
 
-                  <button onClick={() => handleDelete(survey.id, survey.title)} className="btn-sm btn-ghost hover:bg-red-500/10 hover:text-red-400 flex-1 md:flex-none justify-center">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {profile?.role !== 'admin' && (
+                    <button onClick={() => handleDelete(survey.id, survey.title)} className="btn-sm btn-ghost hover:bg-red-500/10 hover:text-red-400 flex-1 md:flex-none justify-center" title="Sil">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
 
                 </div>
 
@@ -190,23 +190,45 @@ export default function AdminSurveysPage() {
         </div>
       )}
 
-      {/* QR Modal */}
-      {qrModal.isOpen && (
+      {/* Share Modal */}
+      {shareModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-dark-900 border border-dark-700 w-full max-w-sm rounded-2xl shadow-xl flex flex-col p-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-semibold text-lg text-dark-100 flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-primary-400" />
-                QR Kod Oluştur
+                <Share2 className="w-5 h-5 text-primary-400" />
+                Anketi Paylaş
               </h3>
-              <button onClick={() => setQrModal({ isOpen: false, link: '', title: '' })} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
+              <button onClick={() => setShareModal({ isOpen: false, link: '', title: '' })} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <div className="mb-6 space-y-2">
+              <label className="text-xs text-dark-400 font-medium">Anket Linki (Otomatik Kopyalandı)</label>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={shareModal.link} 
+                  className="input flex-1 text-sm bg-dark-800 border-dark-700 text-dark-200"
+                />
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareModal.link)
+                    addNotification('Link kopyalandı.', 'success')
+                  }}
+                  className="btn-md btn-secondary px-3"
+                  title="Kopyala"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
             
             <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 rounded-xl mb-6 relative" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
-              <p className="text-black font-bold text-center text-lg leading-tight w-full break-words">{qrModal.title}</p>
-              <QRCodeCanvas value={qrModal.link} size={220} level={"H"} className="mt-2" />
+              <p className="text-black font-bold text-center text-lg leading-tight w-full break-words">{shareModal.title}</p>
+              <QRCodeCanvas value={shareModal.link} size={220} level={"H"} className="mt-2" />
               <p className="text-black/60 text-xs text-center mt-4">Telefonunuzun kamerasını okutarak ankete katılabilirsiniz.</p>
             </div>
             
@@ -216,7 +238,7 @@ export default function AdminSurveysPage() {
                 if (!element) return
                 html2pdf().set({
                   margin: 10,
-                  filename: `${qrModal.title}-QR.pdf`,
+                  filename: `${shareModal.title}-QR.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
                   html2canvas: { scale: 3, useCORS: true },
                   jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -224,7 +246,7 @@ export default function AdminSurveysPage() {
               }}
               className="btn-md btn-primary w-full gap-2"
             >
-              <Download className="w-4 h-4" /> PDF Olarak Dışa Aktar
+              <Download className="w-4 h-4" /> QR Kodu PDF Olarak Kaydet
             </button>
           </div>
         </div>

@@ -25,7 +25,7 @@ const QUESTION_TYPES: { type: QuestionType; label: string; icon: any }[] = [
 export default function AdminSurveyBuilder() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { tenant, user } = useAuthStore()
+  const { tenant, user, profile } = useAuthStore()
   const { addNotification } = useNotificationStore()
   
   const [loading, setLoading] = useState(!!id)
@@ -318,10 +318,12 @@ export default function AdminSurveyBuilder() {
                       }}
                       className="bg-transparent text-dark-200 focus:outline-none focus:border-b focus:border-primary-500 text-sm w-full md:w-1/2"
                     />
-                    <button onClick={() => {
-                        const newOpts = [...q.options]; newOpts.splice(oIndex, 1);
-                        updateQuestion(qIndex, { options: newOpts })
-                    }} className="text-dark-500 hover:text-red-400 p-1">✕</button>
+                    {profile?.role !== 'admin' && (
+                      <button onClick={() => {
+                          const newOpts = [...q.options]; newOpts.splice(oIndex, 1);
+                          updateQuestion(qIndex, { options: newOpts })
+                      }} className="text-dark-500 hover:text-red-400 p-1">✕</button>
+                    )}
                   </div>
                 ))}
                 <div className="flex items-center gap-3 mt-2 opacity-60">
@@ -364,9 +366,11 @@ export default function AdminSurveyBuilder() {
                 <Copy className="w-4 h-4" />
                 <span className="hidden sm:inline">Klonla</span>
               </button>
-              <button onClick={() => removeQuestion(qIndex)} className="p-2 text-dark-400 hover:text-red-400 transition-colors" title="Soruyu Sil">
-                <Trash2 className="w-5 h-5" />
-              </button>
+              {profile?.role !== 'admin' && (
+                <button onClick={() => removeQuestion(qIndex)} className="p-2 text-dark-400 hover:text-red-400 transition-colors" title="Soruyu Sil">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
             </div>
             
           </div>
