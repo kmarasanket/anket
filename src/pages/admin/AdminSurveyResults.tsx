@@ -143,11 +143,35 @@ export default function AdminSurveyResults() {
     return String(raw)
   }
 
-  // Rapor Tablosu Verisi (Sadece "radio" ve "checkbox" soruları)
+  // Rapor Tablosu Verisi (Sadece ana ölçeğe sahip "radio" ve "checkbox" soruları)
   const reportData = useMemo(() => {
-    const targetQuestions = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
-    // Sütun başlıkları: ilk uygun sorunun seçenekleri (örneğin Likert ölçeği seçenekleri)
-    const options = targetQuestions.length > 0 ? (targetQuestions[0].options || []) : []
+    const radioQuestions = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
+    
+    // Soruları seçeneklerine göre grupla ve en çok kullanılan seçenek setini (ana anket ölçeği) bul
+    const optionCounts: Record<string, { count: number, options: string[] }> = {}
+    radioQuestions.forEach(q => {
+      if (!q.options || q.options.length === 0) return
+      const key = JSON.stringify(q.options)
+      if (!optionCounts[key]) optionCounts[key] = { count: 0, options: q.options }
+      optionCounts[key].count++
+    })
+    
+    let mainOptions: string[] = []
+    let maxCount = 0
+    Object.values(optionCounts).forEach(item => {
+      if (item.count > maxCount) {
+        maxCount = item.count
+        mainOptions = item.options
+      }
+    })
+
+    // Sadece ana seçenek setine sahip soruları filtrele (Böylece demografik sorular hariç tutulur)
+    const targetQuestions = radioQuestions.filter(q => {
+      if (!q.options) return false
+      return JSON.stringify(q.options) === JSON.stringify(mainOptions)
+    })
+    
+    const options = mainOptions
     
     const rows = targetQuestions.map(q => {
       const counts: Record<string, number> = {}
