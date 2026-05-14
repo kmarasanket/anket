@@ -21,6 +21,7 @@ export default function PublicSurveyPage() {
   
   const [answers, setAnswers] = useState<Record<string, any>>({})
   const [errorMsg, setErrorMsg] = useState('')
+  const [kvkkConsent, setKvkkConsent] = useState(false)
 
   useEffect(() => {
     const loadSurvey = async () => {
@@ -137,10 +138,17 @@ export default function PublicSurveyPage() {
 
     setErrorMsg('')
     
-    // Final validation for the last page
+    // Son sayfa validasyonu
     const missing = currentQuestions.find(q => q.is_required && q.type !== 'section' && (!answers[q.id] || (Array.isArray(answers[q.id]) && answers[q.id].length === 0)))
     if (missing) {
       setErrorMsg(`Lütfen "${missing.title}" sorusunu yanıtlayın.`)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    // KVKK onayı zorunlu
+    if (!kvkkConsent) {
+      setErrorMsg('Devam edebilmek için lütfen KVKK aydınlatma metnini onaylayın.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
@@ -383,6 +391,40 @@ export default function PublicSurveyPage() {
             )
           })}
 
+          {/* KVKK Onay Kutusu - Sadece Son Sayfada */}
+          {isLastPage && (
+            <div className="mt-6 p-5 rounded-2xl border border-primary-500/20 bg-primary-500/5">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="relative mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    id="kvkk-consent"
+                    checked={kvkkConsent}
+                    onChange={e => setKvkkConsent(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                    kvkkConsent
+                      ? 'bg-primary-500 border-primary-500'
+                      : 'border-dark-500 bg-dark-900 group-hover:border-primary-400'
+                  }`}>
+                    {kvkkConsent && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <span className="text-sm text-dark-300 leading-relaxed">
+                  <span className="font-semibold text-dark-100">KVKK Aydınlatma Metni: </span>
+                  Bu ankette verdiğim bilgilerin, kurumsal hizmet kalitesinin iyileştirilmesi amacıyla{' '}
+                  <span className="text-primary-400 font-medium">anonim olarak</span>{' '}
+                  işlenmesini ve değerlendirilmesini onaylıyorum. Kişisel verilerim üçüncü şahıslarla paylaşılmayacaktır.
+                </span>
+              </label>
+            </div>
+          )}
+
           {/* Navigasyon Butonları */}
           <div className="pt-6 pb-12 flex items-center justify-between gap-4">
             <div className="hidden sm:block">
@@ -415,8 +457,10 @@ export default function PublicSurveyPage() {
                 ) : (
                     <button 
                         type="submit" 
-                        disabled={submitting} 
-                        className="btn-lg btn-primary flex-1 sm:flex-none min-w-[160px]"
+                        disabled={submitting || !kvkkConsent} 
+                        className={`btn-lg flex-1 sm:flex-none min-w-[160px] transition-all ${
+                          kvkkConsent ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed'
+                        }`}
                     >
                         {submitting ? 'Gönderiliyor...' : (
                             <span className="flex items-center justify-center gap-2">
