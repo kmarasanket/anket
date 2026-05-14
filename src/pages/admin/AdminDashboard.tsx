@@ -23,33 +23,40 @@ export default function AdminDashboard() {
         const surveysRes = await qSurveys.execute()
 
         // Sadece bu kurumun tamamlanan yanıtları
-        const qCompleted = httpFrom('responses').select('id, survey_id')
-        qCompleted.eq('tenant_id', tenant.id)
-        qCompleted.eq('is_complete', 'true')
-        const completedRes = await qCompleted.execute()
+        const totalResponses = await httpFrom('responses')
+          .select('id')
+          .eq('tenant_id', tenant.id)
+          .eq('is_complete', 'true')
+          .getCount()
 
-        // Sadece bu kurumun tüm yanıtları
-        const qAll = httpFrom('responses').select('id')
-        qAll.eq('tenant_id', tenant.id)
-        const allRes = await qAll.execute()
+        // Sadece bu kurumun tüm yanıtları (oran için)
+        const totalAll = await httpFrom('responses')
+          .select('id')
+          .eq('tenant_id', tenant.id)
+          .getCount()
 
         const active = surveysRes.data?.length || 0
-        const completedList = completedRes.data || []
-        const total = allRes.data?.length || 0
+        const completedCount = totalResponses || 0
+        const total = totalAll || 0
 
         setStats({
           activeSurveys: active,
-          totalResponses: completedList.length,
-          completionRate: total ? Math.round((completedList.length / total) * 100) : 0
+          totalResponses: completedCount,
+          completionRate: total ? Math.round((completedCount / total) * 100) : 0
         })
 
+        // Dashboard'da listelenecek anketlerin yanıt sayılarını al
         const activeSurveys = surveysRes.data || []
-        const surveysWithCounts = activeSurveys.map((s: any) => ({
-          ...s,
-          real_response_count: completedList.filter((r: any) => r.survey_id === s.id).length
+        const recentWithCounts = await Promise.all(activeSurveys.slice(0, 5).map(async (s: any) => {
+          const count = await httpFrom('responses')
+            .select('id')
+            .eq('survey_id', s.id)
+            .eq('is_complete', 'true')
+            .getCount()
+          return { ...s, real_response_count: count }
         }))
 
-        setRecentSurveys(surveysWithCounts.slice(0, 5))
+        setRecentSurveys(recentWithCounts)
       } catch (err) {
         console.error('Dashboard yüklenemedi:', err)
       } finally {

@@ -27,20 +27,16 @@ export default function AdminSurveysPage() {
       const { data, error } = await q.execute()
       if (error) throw error
       
-      const qResp = httpFrom('responses').select('survey_id')
-      qResp.eq('tenant_id', tenant.id)
-      qResp.eq('is_complete', 'true')
-      const respData = await qResp.execute()
+      const surveysWithCounts = await Promise.all((data || []).map(async (s: any) => {
+        const count = await httpFrom('responses')
+          .select('id')
+          .eq('survey_id', s.id)
+          .eq('is_complete', 'true')
+          .getCount()
+        return { ...s, real_response_count: count }
+      }))
       
-      const counts: Record<string, number> = {}
-      if (respData.data) {
-        respData.data.forEach((r: any) => {
-          counts[r.survey_id] = (counts[r.survey_id] || 0) + 1
-        })
-      }
-      
-      const withCounts = data?.map((s: any) => ({ ...s, real_response_count: counts[s.id] || 0 })) || []
-      setSurveys(withCounts)
+      setSurveys(surveysWithCounts)
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
     } finally {
@@ -225,9 +221,9 @@ export default function AdminSurveysPage() {
               </div>
             </div>
             
-            <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 rounded-xl mb-6 relative" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
-              <img src="/logo_ism.png" alt="Logo" className="h-24 w-auto object-contain mb-2" />
-              <p className="text-black font-bold text-center text-lg leading-tight w-full break-words">{shareModal.title}</p>
+            <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 rounded-xl mb-6 relative overflow-hidden" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
+              <img id="qr-logo" src="/logo_ism.png" alt="Logo" className="w-auto object-contain" style={{ display: 'none', visibility: 'hidden', height: '0px' }} />
+              <p id="qr-title" className="text-black font-bold text-center text-lg leading-tight w-full break-words">{shareModal.title}</p>
               <QRCodeCanvas value={shareModal.link} size={220} level={"H"} className="mt-2" />
               <p className="text-black/60 text-xs text-center mt-4">Telefonunuzun kamerasını okutarak ankete katılabilirsiniz.</p>
             </div>
@@ -235,14 +231,32 @@ export default function AdminSurveysPage() {
             <button 
               onClick={() => {
                 const element = document.getElementById('qr-code-print-area')
-                if (!element) return
-                html2pdf().set({
-                  margin: 10,
+                const logo = document.getElementById('qr-logo')
+                const title = document.getElementById('qr-title')
+                if (!element || !logo) return
+                
+                // PDF için stili geçici olarak değiştir
+                logo.style.display = 'block'
+                logo.style.visibility = 'visible'
+                logo.style.height = '300px' // Yaklaşık 3 kat
+                logo.style.marginBottom = '20px'
+                if (title) title.style.fontSize = '24px'
+                
+                const opt = {
+                  margin: [10, 10, 10, 10],
                   filename: `${shareModal.title}-QR.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: { scale: 3, useCORS: true },
+                  html2canvas: { scale: 3, useCORS: true, letterRendering: true },
                   jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                }).from(element).save()
+                };
+
+                html2pdf().set(opt).from(element).save().then(() => {
+                  logo.style.display = 'none'
+                  logo.style.visibility = 'hidden'
+                  logo.style.height = '0px'
+                  logo.style.marginBottom = '0px'
+                  if (title) title.style.fontSize = '18px'
+                })
               }}
               className="btn-md btn-primary w-full gap-2"
             >

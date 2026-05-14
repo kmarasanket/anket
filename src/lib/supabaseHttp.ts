@@ -100,6 +100,26 @@ export function httpFrom(table: string) {
         isSingle = true
         return builder
       },
+      limit(n: number) {
+        url += `&limit=${n}`
+        return builder
+      },
+      async getCount() {
+        const headers = { ...getHeaders(token) }
+        headers['Prefer'] = 'count=exact'
+        try {
+          const res = await window.fetch(url, { method: 'HEAD', headers })
+          const range = res.headers.get('Content-Range')
+          if (range) {
+            const total = range.split('/')[1]
+            return parseInt(total, 10)
+          }
+          return 0
+        } catch (e) {
+          console.error('Count error:', e)
+          return 0
+        }
+      },
       async execute(): Promise<{ data: any; error: Error | null }> {
         const res = await window.fetch(url, {
           method: 'GET',
