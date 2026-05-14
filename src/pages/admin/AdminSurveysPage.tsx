@@ -221,7 +221,7 @@ export default function AdminSurveysPage() {
               </div>
             </div>
             
-            <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 rounded-xl mb-6 relative overflow-hidden" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
+            <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 pt-12 rounded-xl mb-6 relative" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
               <img id="qr-logo" src="/logo_ism.png" alt="Logo" className="w-auto object-contain" style={{ display: 'none', visibility: 'hidden', height: '0px' }} />
               <p id="qr-title" className="text-black font-bold text-center text-lg leading-tight w-full break-words">{shareModal.title}</p>
               <QRCodeCanvas value={shareModal.link} size={220} level={"H"} className="mt-2" />
