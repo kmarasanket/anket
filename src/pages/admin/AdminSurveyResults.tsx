@@ -1,16 +1,20 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter } from 'lucide-react'
+import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText } from 'lucide-react'
+import html2pdf from 'html2pdf.js'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDateTime } from '../../lib/utils'
+import { useAuthStore } from '../../stores/authStore'
 
 export default function AdminSurveyResults() {
   const { id } = useParams()
+  const { tenant } = useAuthStore()
   const [survey, setSurvey] = useState<any>(null)
   const [questions, setQuestions] = useState<any[]>([])
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
+  const [activeTab, setActiveTab] = useState<'list' | 'report'>('list')
 
   // Filtre modu: 'range' = tarih aralığı, 'month' = ay/yıl seçimi
   const [filterMode, setFilterMode] = useState<'range' | 'month'>('month')
@@ -139,7 +143,69 @@ export default function AdminSurveyResults() {
     return String(raw)
   }
 
-  // Excel / CSV indir
+  // Rapor Tablosu Verisi (Sadece "radio" soruları)
+  const reportData = useMemo(() => {
+    const radioQuestions = questions.filter(q => q.type === 'radio')
+    const options = radioQuestions.length > 0 ? (radioQuestions[0].options || []) : []
+    
+    const rows = radioQuestions.map(q => {
+      const counts: Record<string, number> = {}
+      options.forEach((opt: string) => counts[opt] = 0)
+      
+      filteredResponses.forEach(r => {
+        const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
+        const val = getAnswerValue(ans)
+        if (options.includes(val)) counts[val]++
+      })
+      return { question: q.title, counts }
+    })
+
+    const totals: Record<string, number> = {}
+    options.forEach((opt: string) => totals[opt] = 0)
+    rows.forEach(r => {
+      options.forEach((opt: string) => totals[opt] += r.counts[opt])
+    })
+
+    const grandTotal = radioQuestions.length * filteredResponses.length
+    const percentages: Record<string, string> = {}
+    options.forEach((opt: string) => {
+      percentages[opt] = grandTotal > 0 ? ((totals[opt] / grandTotal) * 100).toFixed(1) + '%' : '0%'
+    })
+
+    return { radioQuestions, options, rows, totals, grandTotal, percentages }
+  }, [questions, filteredResponses])
+
+  const exportPDF = () => {
+    const element = document.getElementById('report-table-print-area')
+    if (!element) return
+    const opt = {
+      margin:       10,
+      filename:     `${survey?.title || 'Rapor'}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }
+    html2pdf().set(opt).from(element).save()
+  }
+
+  const exportReportExcel = () => {
+    const table = document.getElementById('report-table')
+    if (!table) return
+    const html = table.outerHTML
+    const blob = new Blob([`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body>${html}</body></html>`], {
+      type: 'application/vnd.ms-excel'
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${survey?.title || 'Rapor'}.xls`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // Raw Excel / CSV indir
   const downloadExcel = () => {
     const dataQuestions = questions.filter(q => q.type !== 'section')
     const BOM = '\ufeff'
@@ -342,69 +408,174 @@ export default function AdminSurveyResults() {
         </div>
       </div>
 
-      {/* Katılımcı Tablosu */}
-      <div className="card">
-        <div className="p-5 border-b border-dark-800 flex items-center gap-3">
-          <LayoutList className="w-5 h-5 text-accent-400" />
-          <h3 className="font-semibold text-dark-100">
-            Katılımcılar
-            {isFiltered && <span className="ml-2 text-sm text-primary-400">({filteredResponses.length} sonuç)</span>}
-          </h3>
-        </div>
+      {/* Sekmeler */}
+      <div className="flex border-b border-dark-800 mt-8 mb-4">
+        <button
+          onClick={() => setActiveTab('list')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+            activeTab === 'list' ? 'border-primary-500 text-primary-400' : 'border-transparent text-dark-400 hover:text-dark-200'
+          }`}
+        >
+          Katılımcı Listesi
+        </button>
+        <button
+          onClick={() => setActiveTab('report')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+            activeTab === 'report' ? 'border-primary-500 text-primary-400' : 'border-transparent text-dark-400 hover:text-dark-200'
+          }`}
+        >
+          Seçenek Bazında Verilen Cevap Raporu
+        </button>
+      </div>
 
-        {filteredResponses.length === 0 ? (
-          <div className="p-8 text-center text-dark-400">
-            {isFiltered ? 'Bu tarih aralığında yanıt bulunamadı.' : 'Henüz kimse bu anketi yanıtlamadı.'}
+      {activeTab === 'list' ? (
+        {/* Katılımcı Tablosu */}
+        <div className="card">
+          <div className="p-5 border-b border-dark-800 flex items-center gap-3">
+            <LayoutList className="w-5 h-5 text-accent-400" />
+            <h3 className="font-semibold text-dark-100">
+              Katılımcılar
+              {isFiltered && <span className="ml-2 text-sm text-primary-400">({filteredResponses.length} sonuç)</span>}
+            </h3>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-dark-900 border-b border-dark-800 text-dark-400">
-                <tr>
-                  <th className="px-6 py-4 font-medium">#</th>
-                  <th className="px-6 py-4 font-medium">Tarih / Saat</th>
-                  <th className="px-6 py-4 font-medium">Tarayıcı</th>
-                  <th className="px-6 py-4 font-medium text-right">Detaylar</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dark-800">
-                {filteredResponses.map((r, i) => {
-                  const browser = r.metadata?.b === 'ch' ? 'Chrome'
-                    : r.metadata?.b === 'ff' ? 'Firefox'
-                    : r.metadata?.b === 'sf' ? 'Safari'
-                    : r.metadata?.b === 'ed' ? 'Edge'
-                    : 'Diğer'
-                  const isMobile = r.metadata?.m === 1
 
-                  return (
-                    <tr key={r.id} className="hover:bg-dark-800/50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-dark-200">
-                        #{filteredResponses.length - i}
-                      </td>
-                      <td className="px-6 py-4 text-dark-300">
-                        {r.completed_at ? formatDateTime(r.completed_at) : (
-                          <span className="text-dark-500 italic">Tarih kaydedilmemiş</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-dark-400 text-xs">
-                        {browser}{isMobile ? ' · Mobil' : ''}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => setSelectedResponse(r)}
-                          className="text-primary-400 hover:text-primary-300 font-medium"
-                        >
-                          İncele
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
+          {filteredResponses.length === 0 ? (
+            <div className="p-8 text-center text-dark-400">
+              {isFiltered ? 'Bu tarih aralığında yanıt bulunamadı.' : 'Henüz kimse bu anketi yanıtlamadı.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-dark-900 border-b border-dark-800 text-dark-400">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">#</th>
+                    <th className="px-6 py-4 font-medium">Tarih / Saat</th>
+                    <th className="px-6 py-4 font-medium">Tarayıcı</th>
+                    <th className="px-6 py-4 font-medium text-right">Detaylar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-800">
+                  {filteredResponses.map((r, i) => {
+                    const browser = r.metadata?.b === 'ch' ? 'Chrome'
+                      : r.metadata?.b === 'ff' ? 'Firefox'
+                      : r.metadata?.b === 'sf' ? 'Safari'
+                      : r.metadata?.b === 'ed' ? 'Edge'
+                      : 'Diğer'
+                    const isMobile = r.metadata?.m === 1
+
+                    return (
+                      <tr key={r.id} className="hover:bg-dark-800/50 transition-colors">
+                        <td className="px-6 py-4 font-medium text-dark-200">
+                          #{filteredResponses.length - i}
+                        </td>
+                        <td className="px-6 py-4 text-dark-300">
+                          {r.completed_at ? formatDateTime(r.completed_at) : (
+                            <span className="text-dark-500 italic">Tarih kaydedilmemiş</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-dark-400 text-xs">
+                          {browser}{isMobile ? ' · Mobil' : ''}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setSelectedResponse(r)}
+                            className="text-primary-400 hover:text-primary-300 font-medium"
+                          >
+                            İncele
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        {/* Seçenek Bazında Rapor (Print Area) */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-dark-100">Rapor Önizleme</h3>
+            <div className="flex gap-3">
+              <button onClick={exportReportExcel} className="btn-md btn-secondary gap-2 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30">
+                <FileSpreadsheet className="w-4 h-4" /> Tabloyu Excel İndir
+              </button>
+              <button onClick={exportPDF} className="btn-md btn-secondary gap-2 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30">
+                <FileText className="w-4 h-4" /> PDF Kaydet
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto bg-white text-black p-8 rounded border border-dark-700" id="report-table-print-area">
+            <style>{`
+              #report-table {
+                font-family: Arial, sans-serif;
+                font-size: 11px;
+                width: 100%;
+                border-collapse: collapse;
+                color: black;
+              }
+              #report-table th, #report-table td {
+                border: 1px solid #000;
+                padding: 4px;
+                text-align: center;
+              }
+              #report-table .text-left { text-align: left; }
+              #report-table .font-bold { font-weight: bold; }
+              #report-table .header-info td { border: none; padding: 2px 0; text-align: left; }
+            `}</style>
+            
+            <table id="report-table">
+              <tbody>
+                <tr className="header-info"><td colSpan={reportData.options.length + 1} className="font-bold text-[14px]">Seçenek Bazında Verilen Cevap Sayısı ve Oranı</td></tr>
+                <tr className="header-info"><td colSpan={reportData.options.length + 1}>Anket Adı: {survey?.title}</td></tr>
+                <tr className="header-info"><td colSpan={reportData.options.length + 1}>Yıl/Ay: {selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</td></tr>
+                <tr className="header-info"><td colSpan={reportData.options.length + 1}>Hastane Adı: {tenant?.name || '-'}</td></tr>
+                <tr className="header-info"><td colSpan={reportData.options.length + 1}>İlgili Dönemde Anket Uygulanan Kişi Sayısı: {filteredResponses.length}</td></tr>
+                <tr><td colSpan={reportData.options.length + 1} style={{height: '10px', border: 'none'}}></td></tr>
+                
+                <tr>
+                  <th className="text-left bg-gray-100" style={{ width: '40%' }}>SORULAR</th>
+                  <th colSpan={reportData.options.length} className="bg-gray-100">Cevap Seçeneği (Kişi Sayısı)</th>
+                </tr>
+                <tr>
+                  <th></th>
+                  {reportData.options.map((opt: string, i: number) => (
+                    <th key={i} className="bg-gray-100">{opt}</th>
+                  ))}
+                </tr>
+                
+                {reportData.rows.map((row, i) => (
+                  <tr key={i}>
+                    <td className="text-left">{i + 1}. {row.question}</td>
+                    {reportData.options.map((opt: string, j: number) => (
+                      <td key={j}>{row.counts[opt]}</td>
+                    ))}
+                  </tr>
+                ))}
+                
+                <tr>
+                  <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Toplam Cevap Sayısı ({reportData.options.join(', ')} Toplamı)</td>
+                  {reportData.options.map((opt: string, i: number) => (
+                    <td key={i} className="font-bold bg-gray-100">{reportData.totals[opt]}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="text-left font-bold bg-gray-100">Toplam Cevap Sayısı (Anketteki Soru Sayısı X Anket Uygulanan Kişi Sayısı)</td>
+                  <td colSpan={reportData.options.length} className="font-bold bg-gray-100">{reportData.grandTotal}</td>
+                </tr>
+                <tr>
+                  <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Cevap Oranı (Her Seçenekte Verilen Toplam Cevap Sayısı / Toplam Cevap Sayısı)</td>
+                  {reportData.options.map((opt: string, i: number) => (
+                    <td key={i} className="font-bold bg-gray-100">{reportData.percentages[opt]}</td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Yanıt Detay Modalı */}
       {selectedResponse && (
