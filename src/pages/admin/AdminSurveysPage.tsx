@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, QrCode, X, Download } from 'lucide-react'
+import html2pdf from 'html2pdf.js'
+import { QRCodeCanvas } from 'qrcode.react'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDate } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
@@ -13,6 +15,7 @@ export default function AdminSurveysPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [qrModal, setQrModal] = useState<{isOpen: boolean, link: string, title: string}>({isOpen: false, link: '', title: ''})
   const { addNotification } = useNotificationStore()
 
   const fetchSurveys = async () => {
@@ -150,6 +153,14 @@ export default function AdminSurveysPage() {
                     )}
                   </button>
 
+                  <button 
+                    onClick={() => setQrModal({ isOpen: true, link: `${window.location.origin}/s/${survey.slug}`, title: survey.title })}
+                    className="btn-sm btn-ghost group relative flex-1 md:flex-none justify-center"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span className="hidden md:inline md:text-xs opacity-0 group-hover:opacity-100 absolute -top-8 px-2 py-1 bg-dark-800 rounded text-dark-100 transition-opacity">QR Kod</span>
+                  </button>
+
                   <a 
                     href={`/s/${survey.slug}`} target="_blank" rel="noreferrer"
                     className="btn-sm btn-ghost hover:text-primary-400 flex-1 md:flex-none justify-center" title="Önizle"
@@ -176,6 +187,46 @@ export default function AdminSurveysPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* QR Modal */}
+      {qrModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-sm rounded-2xl shadow-xl flex flex-col p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-semibold text-lg text-dark-100 flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-primary-400" />
+                QR Kod Oluştur
+              </h3>
+              <button onClick={() => setQrModal({ isOpen: false, link: '', title: '' })} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex flex-col items-center justify-center gap-4 bg-white p-8 rounded-xl mb-6 relative" id="qr-code-print-area" style={{ width: '100%', boxSizing: 'border-box' }}>
+              <p className="text-black font-bold text-center text-lg leading-tight w-full break-words">{qrModal.title}</p>
+              <QRCodeCanvas value={qrModal.link} size={220} level={"H"} className="mt-2" />
+              <p className="text-black/60 text-xs text-center mt-4">Telefonunuzun kamerasını okutarak ankete katılabilirsiniz.</p>
+            </div>
+            
+            <button 
+              onClick={() => {
+                const element = document.getElementById('qr-code-print-area')
+                if (!element) return
+                html2pdf().set({
+                  margin: 10,
+                  filename: `${qrModal.title}-QR.pdf`,
+                  image: { type: 'jpeg', quality: 0.98 },
+                  html2canvas: { scale: 3, useCORS: true },
+                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                }).from(element).save()
+              }}
+              className="btn-md btn-primary w-full gap-2"
+            >
+              <Download className="w-4 h-4" /> PDF Olarak Dışa Aktar
+            </button>
+          </div>
         </div>
       )}
     </div>
