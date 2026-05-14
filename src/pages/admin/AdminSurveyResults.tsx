@@ -574,7 +574,7 @@ export default function AdminSurveyResults() {
                 
                 <table id="report-table">
                   <tbody>
-                    <tr className="header-info"><td colSpan={reportData.options.length + 1} className="font-bold text-[15px] pb-4 border-b border-black">Seçenek Bazında Verilen Cevap Sayısı ve Oranı</td></tr>
+                    <tr className="header-info"><td colSpan={reportData.options.length + 1} className="font-bold text-[24px] uppercase pb-6 border-b border-black" style={{ fontSize: '24px' }}>SEÇENEK BAZINDA VERİLEN CEVAP SAYISI VE ORANI</td></tr>
                     <tr><td colSpan={reportData.options.length + 1} style={{height: '10px', border: 'none'}}></td></tr>
                     <tr className="header-info"><td colSpan={reportData.options.length + 1}>Anket Adı: <span className="font-bold">{survey?.title}</span></td></tr>
                     <tr className="header-info"><td colSpan={reportData.options.length + 1}>Yıl/Ay: <span className="font-bold">{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</span></td></tr>
@@ -583,11 +583,10 @@ export default function AdminSurveyResults() {
                     <tr><td colSpan={reportData.options.length + 1} style={{height: '15px', border: 'none'}}></td></tr>
                     
                     <tr>
-                      <th className="text-left bg-gray-100" style={{ width: '45%' }}>SORULAR</th>
+                      <th className="text-left bg-gray-100" rowSpan={2} style={{ width: '45%' }}>SORULAR</th>
                       <th colSpan={reportData.options.length} className="bg-gray-100">Cevap Seçeneği (Kişi Sayısı)</th>
                     </tr>
                     <tr>
-                      <th className="bg-gray-100 border-t-0"></th>
                       {reportData.options.map((opt: string, i: number) => (
                         <th key={i} className="bg-gray-100">{opt}</th>
                       ))}
@@ -595,7 +594,7 @@ export default function AdminSurveyResults() {
                     
                     {reportData.rows.map((row, i) => (
                       <tr key={i} className="hover-row">
-                        <td className="text-left">{i + 1}. {row.question}</td>
+                        <td className="text-left">{row.question}</td>
                         {reportData.options.map((opt: string, j: number) => (
                           <td key={j}>{row.counts[opt]}</td>
                         ))}
