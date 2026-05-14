@@ -497,6 +497,7 @@ export default function AdminSurveyResults() {
           }`}
         >
           Seçenek Bazında Verilen Cevap Raporu
+        </button>
         <button
           onClick={() => setActiveTab('score_report')}
           className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
