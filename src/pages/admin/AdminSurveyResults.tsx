@@ -6,6 +6,18 @@ import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDateTime } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
 
+const getOptionWeight = (opt: string, index: number, totalOptions: number) => {
+  const lower = opt.toLowerCase().trim()
+  if (lower.includes('tamamen') && lower.includes('katıl')) return 4
+  if (lower === 'katılıyorum') return 3
+  if (lower === 'kararsızım') return 2
+  if (lower === 'katılmıyorum') return 1
+  if (lower.includes('kesinlikle') && lower.includes('katılmıyor')) return 0
+  // Fallback
+  if (totalOptions === 5) return 4 - index
+  return 0
+}
+
 export default function AdminSurveyResults() {
   const { id } = useParams()
   const { tenant } = useAuthStore()
@@ -14,7 +26,7 @@ export default function AdminSurveyResults() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'list' | 'report'>('list')
+  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report'>('list')
 
   // Filtre modu: 'range' = tarih aralığı, 'month' = ay/yıl seçimi
   const [filterMode, setFilterMode] = useState<'range' | 'month'>('month')
@@ -199,6 +211,41 @@ export default function AdminSurveyResults() {
 
     return { targetQuestions, options, rows, totals, grandTotal, percentages }
   }, [questions, filteredResponses])
+
+  // Soru Bazında Karşılanma Oranı Verisi
+  const scoreReportData = useMemo(() => {
+    if (!reportData) return null
+    const { options, rows } = reportData
+    if (options.length === 0) return null
+
+    const weights: Record<string, number> = {}
+    options.forEach((opt: string, idx: number) => {
+      weights[opt] = getOptionWeight(opt, idx, options.length)
+    })
+
+    const scoreRows = rows.map(row => {
+      let totalScore = 0
+      const weightedCounts: Record<string, number> = {}
+      
+      options.forEach((opt: string) => {
+        const weight = weights[opt]
+        const wScore = row.counts[opt] * weight
+        weightedCounts[opt] = wScore
+        totalScore += wScore
+      })
+
+      const maxPossibleScore = filteredResponses.length * 4
+      const percentage = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0
+
+      return {
+        question: row.question,
+        weightedCounts,
+        percentage
+      }
+    })
+
+    return { weights, rows: scoreRows, options }
+  }, [reportData, filteredResponses.length])
 
   const exportPDF = () => {
     const element = document.getElementById('report-table-print-area')
@@ -450,10 +497,17 @@ export default function AdminSurveyResults() {
           }`}
         >
           Seçenek Bazında Verilen Cevap Raporu
+        <button
+          onClick={() => setActiveTab('score_report')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+            activeTab === 'score_report' ? 'border-primary-500 text-primary-400' : 'border-transparent text-dark-400 hover:text-dark-200'
+          }`}
+        >
+          Soru Bazında Karşılanma Oranı
         </button>
       </div>
 
-      {activeTab === 'list' ? (
+      {activeTab === 'list' && (
         <div className="card">
           <div className="p-5 border-b border-dark-800 flex items-center gap-3">
             <LayoutList className="w-5 h-5 text-accent-400" />
@@ -516,7 +570,9 @@ export default function AdminSurveyResults() {
             </div>
           )}
         </div>
-      ) : (
+      )}
+      
+      {activeTab === 'report' && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-dark-100 flex items-center gap-3">
@@ -619,6 +675,104 @@ export default function AdminSurveyResults() {
                         <td key={i} className="font-bold bg-gray-100">{reportData.percentages[opt]}</td>
                       ))}
                     </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'score_report' && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-dark-100 flex items-center gap-3">
+              <FileText className="w-5 h-5 text-primary-400" />
+              Soru Bazında Karşılanma Oranı (Önizleme)
+              <span className="text-dark-400 font-normal text-xs bg-dark-800 px-2 py-1 rounded-md">A4 Yatay (Landscape)</span>
+            </h3>
+            <div className="flex gap-3">
+              <button onClick={() => {
+                const element = document.getElementById('score-report-table-print-area')
+                if (!element) return
+                html2pdf().set({
+                  margin: 0,
+                  filename: `${survey?.title || 'Karşılanma Oranı Raporu'}.pdf`,
+                  image: { type: 'jpeg', quality: 0.98 },
+                  html2canvas: { scale: 2 },
+                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                }).from(element).save()
+              }} className="btn-md btn-primary gap-2">
+                <Download className="w-4 h-4" /> PDF Olarak Kaydet
+              </button>
+            </div>
+          </div>
+
+          {!scoreReportData ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Bu rapor için uygun soru formatı bulunamadı.</p>
+            </div>
+          ) : (
+            <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
+              <div 
+                id="score-report-table-print-area" 
+                className="bg-white text-black shadow-2xl relative"
+                style={{ width: '297mm', minHeight: '210mm', maxWidth: 'none', padding: '10mm', boxSizing: 'border-box' }}
+              >
+                <style>{`
+                  #score-report-table {
+                    font-family: Arial, sans-serif;
+                    font-size: 11px;
+                    width: 100%;
+                    border-collapse: collapse;
+                    color: black;
+                  }
+                  #score-report-table th, #score-report-table td {
+                    border: 1px solid #444;
+                    padding: 6px 4px;
+                    text-align: center;
+                    vertical-align: middle;
+                  }
+                  #score-report-table .text-left { text-align: left; }
+                  #score-report-table .font-bold { font-weight: bold; }
+                  #score-report-table .header-info td { border: none; padding: 2px 0; text-align: left; font-size: 12px; }
+                  #score-report-table th { background-color: #f3f4f6; font-weight: bold; }
+                  #score-report-table .bg-gray-100 { background-color: #f3f4f6 !important; }
+                `}</style>
+                
+                <table id="score-report-table">
+                  <tbody>
+                    <tr className="header-info"><td colSpan={scoreReportData.options.length + 2} className="font-bold text-[24px] uppercase pb-6 border-b border-black" style={{ fontSize: '24px' }}>SORU BAZINDA KARŞILANMA ORANI</td></tr>
+                    <tr><td colSpan={scoreReportData.options.length + 2} style={{height: '10px', border: 'none'}}></td></tr>
+                    <tr className="header-info"><td colSpan={scoreReportData.options.length + 2}>Anket Adı: <span className="font-bold">{survey?.title}</span></td></tr>
+                    <tr className="header-info"><td colSpan={scoreReportData.options.length + 2}>Yıl/Ay: <span className="font-bold">{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</span></td></tr>
+                    <tr className="header-info"><td colSpan={scoreReportData.options.length + 2}>Hastane Adı: <span className="font-bold">{tenant?.name || '-'}</span></td></tr>
+                    <tr className="header-info"><td colSpan={scoreReportData.options.length + 2}>İlgili Dönemde Anket Uygulanan Kişi Sayısı: <span className="font-bold">{filteredResponses.length}</span></td></tr>
+                    <tr><td colSpan={scoreReportData.options.length + 2} style={{height: '15px', border: 'none'}}></td></tr>
+                    
+                    <tr>
+                      <th className="text-left bg-gray-100" rowSpan={2} style={{ width: '40%' }}>SORULAR</th>
+                      <th colSpan={scoreReportData.options.length} className="bg-gray-100">Cevap Seçeneği (Oransal Dağılım)</th>
+                      <th className="bg-gray-100" rowSpan={2} style={{ width: '15%' }}>Soru Bazında Karşılanma Oranı (%)</th>
+                    </tr>
+                    <tr>
+                      {scoreReportData.options.map((opt: string, i: number) => (
+                        <th key={i} className="bg-gray-100">
+                          {opt}<br/>
+                          <span style={{ fontSize: '9px', fontWeight: 'normal' }}>Cevap Sayısı x {scoreReportData.weights[opt]}</span>
+                        </th>
+                      ))}
+                    </tr>
+                    
+                    {scoreReportData.rows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="text-left">{row.question}</td>
+                        {scoreReportData.options.map((opt: string, j: number) => (
+                          <td key={j}>{row.weightedCounts[opt]}</td>
+                        ))}
+                        <td className="font-bold">{row.percentage}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
