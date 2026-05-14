@@ -22,6 +22,7 @@ export default function PublicSurveyPage() {
   const [answers, setAnswers] = useState<Record<string, any>>({})
   const [errorMsg, setErrorMsg] = useState('')
   const [kvkkConsent, setKvkkConsent] = useState(false)
+  const [missingId, setMissingId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadSurvey = async () => {
@@ -95,15 +96,31 @@ export default function PublicSurveyPage() {
   const isFirstPage = currentPage === 0
   const isLastPage = currentPage === pages.length - 1
 
-  const handleNext = () => {
-    // Current page validation
-    const missing = currentQuestions.find(q => q.is_required && q.type !== 'section' && (!answers[q.id] || (Array.isArray(answers[q.id]) && answers[q.id].length === 0)))
+  // Zorunlu soru kontrolu: eksik soruyu bul, vurgula ve scroll et
+  const validatePage = (qs: any[]): boolean => {
+    const missing = qs.find(q =>
+      q.is_required &&
+      q.type !== 'section' &&
+      (answers[q.id] == null || answers[q.id] === '' ||
+        (Array.isArray(answers[q.id]) && answers[q.id].length === 0))
+    )
     if (missing) {
+      setMissingId(missing.id)
       setErrorMsg(`Lütfen "${missing.title}" sorusunu yanıtlayın.`)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
+      // Eksik soruya scroll et
+      setTimeout(() => {
+        const el = document.getElementById(`question-${missing.id}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+      return false
     }
+    setMissingId(null)
     setErrorMsg('')
+    return true
+  }
+
+  const handleNext = () => {
+    if (!validatePage(currentQuestions)) return
     setCurrentPage(p => p + 1)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -116,16 +133,15 @@ export default function PublicSurveyPage() {
 
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
+    if (missingId === questionId) setMissingId(null) // Hata vurgulamasini kaldir
   }
 
   const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
     setAnswers(prev => {
       const current = Array.isArray(prev[questionId]) ? prev[questionId] : []
-      if (checked) {
-        return { ...prev, [questionId]: [...current, option] }
-      } else {
-        return { ...prev, [questionId]: current.filter((item: string) => item !== option) }
-      }
+      const updated = checked ? [...current, option] : current.filter((item: string) => item !== option)
+      if (missingId === questionId) setMissingId(null)
+      return { ...prev, [questionId]: updated }
     })
   }
 
@@ -137,19 +153,14 @@ export default function PublicSurveyPage() {
     }
 
     setErrorMsg('')
-    
+
     // Son sayfa validasyonu
-    const missing = currentQuestions.find(q => q.is_required && q.type !== 'section' && (!answers[q.id] || (Array.isArray(answers[q.id]) && answers[q.id].length === 0)))
-    if (missing) {
-      setErrorMsg(`Lütfen "${missing.title}" sorusunu yanıtlayın.`)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
+    if (!validatePage(currentQuestions)) return
 
     // KVKK onayı zorunlu
     if (!kvkkConsent) {
       setErrorMsg('Devam edebilmek için lütfen KVKK aydınlatma metnini onaylayın.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ bottom: 0, behavior: 'smooth' })
       return
     }
 
@@ -301,7 +312,15 @@ export default function PublicSurveyPage() {
             }
 
             return (
-              <div key={q.id} className="card p-6 sm:p-8 hover:border-dark-700 transition-colors group">
+              <div
+                key={q.id}
+                id={`question-${q.id}`}
+                className={`card p-6 sm:p-8 transition-colors group ${
+                  missingId === q.id
+                    ? 'border-red-500/60 bg-red-500/5 shadow-[0_0_0_2px_rgba(239,68,68,0.3)]'
+                    : 'hover:border-dark-700'
+                }`}
+              >
                 <div className="mb-4">
                   <h3 className="text-lg font-medium text-dark-50 leading-snug">
                     {q.title}
