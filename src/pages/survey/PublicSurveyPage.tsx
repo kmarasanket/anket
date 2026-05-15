@@ -20,7 +20,7 @@ export default function PublicSurveyPage() {
   const [currentPage, setCurrentPage] = useState(0)
   
   const [answers, setAnswers] = useState<Record<string, any>>({})
-  const [errorMsg, setErrorMsg] = useState('')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [kvkkConsent, setKvkkConsent] = useState(false)
   const [missingId, setMissingId] = useState<string | null>(null)
 
@@ -33,7 +33,11 @@ export default function PublicSurveyPage() {
         qSurvey.ilike('slug', slug!)
         const { data: s, error: sErr } = await qSurvey.single().execute()
 
-        if (sErr || !s) { setLoading(false); return }
+        if (sErr || !s) { 
+          setErrorMsg(sErr ? sErr.message : `Slug eşleşmedi: ${slug}`)
+          setLoading(false) 
+          return 
+        }
 
         if (s.status !== 'active') {
           setSurvey({ ...s, is_closed: true })
@@ -218,6 +222,7 @@ export default function PublicSurveyPage() {
       <div className="card p-12 max-w-md w-full">
         <h1 className="text-2xl font-bold text-dark-50 mb-2">Anket Bulunamadı</h1>
         <p className="text-dark-400">Aradığınız anket yayından kaldırılmış veya URL hatalı olabilir.</p>
+        {errorMsg && <p className="text-red-400 text-xs mt-6 opacity-30 font-mono">Hata Detayı: {errorMsg}</p>}
       </div>
     </div>
   )
