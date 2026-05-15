@@ -93,6 +93,11 @@ export default function PublicSurveyPage() {
   const isFirstPage = currentPage === 0
   const isLastPage = currentPage === pages.length - 1
 
+  // Sayfa değişince en üste kaydır
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [currentPage])
+
   // Zorunlu soru kontrolu: eksik soruyu bul, vurgula ve scroll et
   const validatePage = (qs: any[]): boolean => {
     const missing = qs.find(q =>
@@ -119,7 +124,6 @@ export default function PublicSurveyPage() {
   const handleNext = () => {
     if (!validatePage(currentQuestions)) return
     setCurrentPage(p => p + 1)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handlePrev = () => {
@@ -135,8 +139,11 @@ export default function PublicSurveyPage() {
 
   const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
     setAnswers(prev => {
-      // Tek seçim: yeni seçenek işaretlenince diğerleri temizlenir
-      const updated = checked ? [option] : []
+      const current = (prev[questionId] as string[]) || []
+      const updated = checked 
+        ? [...current, option]
+        : current.filter(o => o !== option)
+      
       if (missingId === questionId) setMissingId(null)
       return { ...prev, [questionId]: updated }
     })
@@ -157,7 +164,7 @@ export default function PublicSurveyPage() {
     // KVKK onayı zorunlu
     if (!kvkkConsent) {
       setErrorMsg('Devam edebilmek için lütfen KVKK aydınlatma metnini onaylayın.')
-      window.scrollTo({ bottom: 0, behavior: 'smooth' })
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
       return
     }
 
@@ -171,12 +178,17 @@ export default function PublicSurveyPage() {
       const ip = '127.0.0.1'
       const hashedIp = await hashIP(ip)
 
+      // ÖNEMLİ: RLS Select yetkisi olmayan public sayfalarda 'returnData' (return=representation) 
+      // bazen boş dönebilir ([]). Bu yüzden ID'yi client tarafında üretip gönderiyoruz.
+      const responseId = crypto.randomUUID()
+
       // Yanıtı kaydet - metadata minimum tutulur (depolama tasarrufu)
       const ua = navigator.userAgent
       const browser = ua.includes('Chrome') ? 'ch' : ua.includes('Firefox') ? 'ff' : ua.includes('Safari') ? 'sf' : ua.includes('Edge') ? 'ed' : 'ot'
       const isMobile = /Mobi|Android/i.test(ua) ? 1 : 0
 
-      const { data: responseData, error: responseError } = await httpFrom('responses').insert({
+      const { error: responseError } = await httpFrom('responses').insert({
+        id: responseId, // Client tarafından üretilen ID
         survey_id: survey.id,
         tenant_id: survey.tenant_id,
         session_token: sessionToken,
@@ -184,15 +196,15 @@ export default function PublicSurveyPage() {
         is_complete: true,
         completed_at: new Date().toISOString(),
         metadata: { b: browser, m: isMobile }
-      }, { returnData: true })
+      })
 
       if (responseError) throw responseError
-      if (!responseData?.[0]?.id) throw new Error('Yanıt ID’si alınamadı.')
 
+      // Cevapları hazırla
       const answersToInsert = Object.entries(answers).map(([question_id, answer]) => ({
-        response_id: responseData[0].id,
+        response_id: responseId,
         question_id,
-        answer: answer  // Düz değer saklanır, sarıcı obj yok
+        answer: answer  // Düz değer saklanır
       }))
 
       if (answersToInsert.length > 0) {
@@ -204,8 +216,9 @@ export default function PublicSurveyPage() {
       navigate(`/s/${slug}/tesekkurler`)
 
     } catch (err: any) {
-      console.error(err)
-      addNotification('Yanıtınız kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.', 'error')
+      console.error('Anket gönderim hatası:', err)
+      const errorDetail = err.message || 'Bilinmeyen hata'
+      addNotification(`Yanıtınız kaydedilirken bir hata oluştu: ${errorDetail}. Lütfen tekrar deneyin.`, 'error')
     } finally {
       setSubmitting(false)
     }

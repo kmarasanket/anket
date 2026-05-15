@@ -243,17 +243,11 @@ export async function httpRpc(fnName: string, params: object) {
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`
   const res = await window.fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'apikey': SUPABASE_ANON_KEY,
-      'Prefer': 'return=minimal'
-    },
+    headers: getHeaders(token, 'minimal'),
     body: JSON.stringify(params)
   })
   if (!res.ok) {
-    let msg = ''
-    try { msg = (await res.clone().json()).message } catch { msg = await res.text() }
+    const msg = await parseError(res)
     return { data: null, error: new Error(`RPC ${fnName}: ${msg}`) }
   }
   return { data: null, error: null }

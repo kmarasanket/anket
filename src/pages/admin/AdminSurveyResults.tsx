@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText } from 'lucide-react'
+import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText, PieChart as PieChartIcon } from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import html2pdf from 'html2pdf.js'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDateTime } from '../../lib/utils'
@@ -27,7 +28,11 @@ export default function AdminSurveyResults() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report'>('list')
+  const [activeTab, setActiveTab] = useState<'participants' | 'report' | 'score_report' | 'chart_report'>('participants')
+
+  // Rapor Ayarları
+  const [pageSize, setPageSize] = useState<'a4' | 'a3'>('a4')
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
 
   // Filtre modu: 'range' = tarih aralığı, 'month' = ay/yıl seçimi
   const [filterMode, setFilterMode] = useState<'range' | 'month'>('month')
@@ -298,6 +303,40 @@ export default function AdminSurveyResults() {
     XLSX.writeFile(wb, `${survey?.title || 'Rapor'}.xlsx`)
   }
 
+  // Grafik Rapor Verisi
+  const chartReportData = useMemo(() => {
+    return questions
+      .filter(q => q.type === 'radio' || q.type === 'checkbox')
+      .map(q => {
+        const data: { name: string, value: number }[] = []
+        const options = q.options || []
+        
+        options.forEach((opt: string) => {
+          let count = 0
+          filteredResponses.forEach(r => {
+            const ans = findResponseAnswer(r, q)
+            const val = getAnswerValue(ans)
+            // Checkbox ise virgülle ayrılmış olabilir
+            if (q.type === 'checkbox') {
+              if (val.split(', ').includes(opt)) count++
+            } else {
+              if (val === opt) count++
+            }
+          })
+          data.push({ name: opt, value: count })
+        })
+
+        return {
+          id: q.id,
+          title: q.title,
+          data: data.filter(d => d.value > 0) // Sadece yanıtı olanları göster (isteğe bağlı)
+        }
+      })
+      .filter(q => q.data.length > 0)
+  }, [questions, filteredResponses])
+
+  const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+
   // Katılımcı Listesini normal Excel (XLS) olarak indir
   const downloadExcel = () => {
     const dataQuestions = questions.filter(q => q.type !== 'section')
@@ -514,13 +553,19 @@ export default function AdminSurveyResults() {
         >
           Seçenek Bazında Verilen Cevap Raporu
         </button>
-        <button
+        <button 
           onClick={() => setActiveTab('score_report')}
-          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
-            activeTab === 'score_report' ? 'border-primary-500 text-primary-400' : 'border-transparent text-dark-400 hover:text-dark-200'
-          }`}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'score_report' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
         >
-          Soru Bazında Karşılanma Oranı
+          <Activity className="w-4 h-4" />
+          Soru Bazında Karşılanma
+        </button>
+        <button 
+          onClick={() => setActiveTab('chart_report')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'chart_report' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
+        >
+          <PieChartIcon className="w-4 h-4" />
+          Soru Bazında Analiz (Grafik)
         </button>
       </div>
 
@@ -591,17 +636,45 @@ export default function AdminSurveyResults() {
       
       {activeTab === 'report' && (
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-dark-100 flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-primary-400" />
-              Rapor Önizleme
-              <span className="text-dark-400 font-normal text-xs bg-dark-800 px-2 py-1 rounded-md">A4 Dikey (Portrait)</span>
-            </h3>
+              <h3 className="font-bold text-dark-100">Rapor Önizleme</h3>
+              <div className="flex items-center gap-2 bg-dark-800 p-1 rounded-lg">
+                <button 
+                  onClick={() => setPageSize('a4')} 
+                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a4' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >A4</button>
+                <button 
+                  onClick={() => setPageSize('a3')} 
+                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a3' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >A3</button>
+                <div className="w-px h-3 bg-dark-700 mx-1"></div>
+                <button 
+                  onClick={() => setOrientation('portrait')} 
+                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'portrait' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >Dikey</button>
+                <button 
+                  onClick={() => setOrientation('landscape')} 
+                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'landscape' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >Yatay</button>
+              </div>
+            </div>
             <div className="flex gap-3">
               <button onClick={exportReportExcel} className="btn-md btn-secondary gap-2 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30">
                 <FileSpreadsheet className="w-4 h-4" /> Excel İndir
               </button>
-              <button onClick={exportPDF} className="btn-md btn-primary gap-2">
+              <button onClick={() => {
+                const element = document.getElementById('report-table-print-area')
+                if (!element) return
+                html2pdf().set({
+                  margin: 10,
+                  filename: `${survey?.title || 'Rapor'}.pdf`,
+                  image: { type: 'jpeg', quality: 0.98 },
+                  html2canvas: { scale: 2 },
+                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation }
+                }).from(element).save()
+              }} className="btn-md btn-primary gap-2">
                 <Download className="w-4 h-4" /> PDF Olarak Kaydet
               </button>
             </div>
@@ -616,8 +689,18 @@ export default function AdminSurveyResults() {
             <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
               <div 
                 id="report-table-print-area" 
-                className="bg-white text-black shadow-2xl relative"
-                style={{ width: '210mm', minHeight: '297mm', maxWidth: 'none', padding: '10mm', boxSizing: 'border-box' }}
+                className="bg-white text-black shadow-2xl relative transition-all duration-300"
+                style={{ 
+                  width: orientation === 'portrait' 
+                    ? (pageSize === 'a4' ? '210mm' : '297mm') 
+                    : (pageSize === 'a4' ? '297mm' : '420mm'),
+                  minHeight: orientation === 'portrait' 
+                    ? (pageSize === 'a4' ? '297mm' : '420mm') 
+                    : (pageSize === 'a4' ? '210mm' : '297mm'),
+                  maxWidth: 'none', 
+                  padding: '10mm', 
+                  boxSizing: 'border-box' 
+                }}
               >
                 <style>{`
                   #report-table {
@@ -694,6 +777,147 @@ export default function AdminSurveyResults() {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'chart_report' && (
+        <div className="card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <PieChartIcon className="w-5 h-5 text-primary-400" />
+              <h3 className="font-bold text-dark-100">SORU BAZINDA SONUÇ ANALİZİ (GRAFİK)</h3>
+              <div className="flex items-center gap-2 bg-dark-800 p-1 rounded-lg">
+                <button 
+                  onClick={() => setPageSize('a4')} 
+                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a4' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >A4</button>
+                <button 
+                  onClick={() => setPageSize('a3')} 
+                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a3' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >A3</button>
+                <div className="w-px h-3 bg-dark-700 mx-1"></div>
+                <button 
+                  onClick={() => setOrientation('portrait')} 
+                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'portrait' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >Dikey</button>
+                <button 
+                  onClick={() => setOrientation('landscape')} 
+                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'landscape' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
+                >Yatay</button>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => {
+                const element = document.getElementById('chart-report-print-area')
+                if (!element) return
+                html2pdf().set({
+                  margin: 10,
+                  filename: `${survey?.title || 'Grafik Rapor'}.pdf`,
+                  image: { type: 'jpeg', quality: 0.98 },
+                  html2canvas: { scale: 2, useCORS: true },
+                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation }
+                }).from(element).save()
+              }} className="btn-md btn-primary gap-2">
+                <Download className="w-4 h-4" /> PDF Olarak Kaydet
+              </button>
+            </div>
+          </div>
+
+          {chartReportData.length === 0 ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Grafik oluşturulabilecek veri bulunamadı.</p>
+            </div>
+          ) : (
+            <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
+              <div 
+                id="chart-report-print-area" 
+                className="bg-white text-black shadow-2xl relative transition-all duration-300"
+                style={{ 
+                  width: orientation === 'portrait' 
+                    ? (pageSize === 'a4' ? '210mm' : '297mm') 
+                    : (pageSize === 'a4' ? '297mm' : '420mm'),
+                  minHeight: orientation === 'portrait' 
+                    ? (pageSize === 'a4' ? '297mm' : '420mm') 
+                    : (pageSize === 'a4' ? '210mm' : '297mm'),
+                  maxWidth: 'none', 
+                  padding: '15mm', 
+                  boxSizing: 'border-box' 
+                }}
+              >
+                {/* Header Info (Same as other reports for consistency) */}
+                <div className="border-b-2 border-black pb-4 mb-6">
+                  <h1 className="text-2xl font-bold uppercase mb-4">SORU BAZINDA SONUÇ ANALİZİ (GRAFİK)</h1>
+                  <div className="grid grid-cols-1 gap-1 text-sm">
+                    <p>Anket Adı: <span className="font-bold">{survey?.title}</span></p>
+                    <p>Yıl/Ay: <span className="font-bold">{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</span></p>
+                    <p>Hastane Adı: <span className="font-bold">{tenant?.name || '-'}</span></p>
+                    <p>Anket Uygulanan Kişi Sayısı: <span className="font-bold">{filteredResponses.length}</span></p>
+                  </div>
+                </div>
+
+                <div className="space-y-12">
+                  {chartReportData.map((item, idx) => (
+                    <div key={item.id} className="break-inside-avoid">
+                      <h4 className="text-sm font-bold mb-4 flex gap-2">
+                        <span>{idx + 1}.</span>
+                        <span>{item.title}</span>
+                      </h4>
+                      <div className="flex flex-col md:flex-row items-center gap-4">
+                        <div className="w-full h-[250px] max-w-[400px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={item.data}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                              >
+                                {item.data.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                              <Legend verticalAlign="bottom" height={36}/>
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex-1 w-full">
+                          <table className="w-full text-xs border-collapse border border-gray-300">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="border border-gray-300 p-2 text-left">Seçenek</th>
+                                <th className="border border-gray-300 p-2 text-center">Sayı</th>
+                                <th className="border border-gray-300 p-2 text-center">Oran</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {item.data.map((d, i) => {
+                                const total = item.data.reduce((acc, curr) => acc + curr.value, 0)
+                                const percentage = total > 0 ? ((d.value / total) * 100).toFixed(1) : 0
+                                return (
+                                  <tr key={i}>
+                                    <td className="border border-gray-300 p-2 text-left flex items-center gap-2">
+                                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
+                                      {d.name}
+                                    </td>
+                                    <td className="border border-gray-300 p-2 text-center font-medium">{d.value}</td>
+                                    <td className="border border-gray-300 p-2 text-center font-medium">%{percentage}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
