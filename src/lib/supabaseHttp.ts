@@ -49,9 +49,11 @@ export function getStoredToken(): string {
 // Ortak İstek Başlıkları
 // ──────────────────────────────────────────────────────────────────────────────
 function getHeaders(token: string, preferReturn = 'representation'): Record<string, string> {
+  // Eğer token yoksa anon key kullan (Public sayfalar için kritik)
+  const finalToken = token || SUPABASE_ANON_KEY
   return {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
+    'Authorization': `Bearer ${finalToken}`,
     'apikey': SUPABASE_ANON_KEY,
     'Prefer': `return=${preferReturn}`,
   }
