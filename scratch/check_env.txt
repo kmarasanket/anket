@@ -1,0 +1,6 @@
+<?php
+// Scratch script to check DB contents
+require_once 'f:/xampp/htdocs/ahtakip/config.php'; // I assume this exists, or I'll just use raw PDO if I know credentials.
+// Actually I don't know the DB credentials for the PHP app easily, but the TS app uses Supabase.
+// I'll check the .env file in the TS app.
+?>

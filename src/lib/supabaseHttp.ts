@@ -88,6 +88,10 @@ export function httpFrom(table: string) {
         url += `&${col}=eq.${encodeURIComponent(val)}`
         return builder
       },
+      ilike(col: string, val: string) {
+        url += `&${col}=ilike.${encodeURIComponent(val)}`
+        return builder
+      },
       in(col: string, vals: string[]) {
         url += `&${col}=in.(${vals.map(v => encodeURIComponent(v)).join(',')})`
         return builder

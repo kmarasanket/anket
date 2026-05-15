@@ -161,11 +161,8 @@ export default function AdminSurveyBuilder() {
 
       // ── ADIM 2: Anket Kaydet (UPSERT via RPC)
       const surveyId = id || uuidv4()
-      // Yeni anketler için kısa slug (başharfler + 4 haneli sayı)
-      // Gücelleme için mevcut slug korunur
-      const finalSlug = id
-        ? (surveyData.slug || generateShortSlug(surveyData.title))
-        : generateShortSlug(surveyData.title)
+      // Öncelik state'deki slug'da, yoksa yeni üret
+      const finalSlug = (surveyData.slug || generateShortSlug(surveyData.title)).toLowerCase().trim()
 
       const { error: rpcError } = await httpRpc('save_survey_secure', {
         p_id: surveyId,
@@ -263,6 +260,16 @@ export default function AdminSurveyBuilder() {
             rows={2}
             style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
           />
+          <div className="pt-2 border-t border-dark-800 flex items-center gap-2 text-sm">
+            <span className="text-dark-500 shrink-0">Anket Linki:</span>
+            <span className="text-dark-400 shrink-0">{window.location.origin}/s/</span>
+            <input 
+              value={surveyData.slug}
+              onChange={e => setSurveyData({...surveyData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
+              className="bg-dark-800 border border-dark-700 rounded px-2 py-0.5 text-primary-400 focus:outline-none focus:border-primary-500 flex-1 min-w-0"
+              placeholder="uzanti"
+            />
+          </div>
         </div>
       </div>
 

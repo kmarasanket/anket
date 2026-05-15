@@ -30,7 +30,7 @@ export default function PublicSurveyPage() {
       try {
         // 1. Önce anketi ve kurumu tek seferde al (slug ile)
         const qSurvey = httpFrom('surveys').select('*, tenants(name,logo_url)')
-        qSurvey.eq('slug', slug!)
+        qSurvey.ilike('slug', slug!)
         const { data: s, error: sErr } = await qSurvey.single().execute()
 
         if (sErr || !s) { setLoading(false); return }
