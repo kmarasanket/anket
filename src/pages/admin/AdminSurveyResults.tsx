@@ -866,28 +866,39 @@ export default function AdminSurveyResults() {
                         <span>{item.title}</span>
                       </h4>
                       <div className="flex flex-col md:flex-row items-center gap-4">
-                        <div className="w-full h-[250px] max-w-[400px]">
+                        <div className="w-full h-[300px] max-w-[450px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
                                 data={item.data}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
+                                labelLine={false}
+                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                  const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                                  const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                                  return (
+                                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
+                                      {percent > 0.05 ? `${(percent * 100).toFixed(1)}%` : ''}
+                                    </text>
+                                  );
+                                }}
+                                innerRadius={0}
+                                outerRadius={100}
                                 dataKey="value"
                               >
                                 {item.data.map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip />
+                              <Tooltip formatter={(value: number) => [`${value} Yanıt`, 'Sayı']} />
                               <Legend verticalAlign="bottom" height={36}/>
                             </PieChart>
                           </ResponsiveContainer>
                         </div>
                         <div className="flex-1 w-full">
+                          <div className="mb-2 text-xs font-bold text-dark-400">CEVAP DAĞILIMI</div>
                           <table className="w-full text-xs border-collapse border border-gray-300">
                             <thead>
                               <tr className="bg-gray-100">
@@ -900,7 +911,7 @@ export default function AdminSurveyResults() {
                               {item.data.map((d, i) => {
                                 const total = item.data.reduce((acc, curr) => acc + curr.value, 0)
                                 const percentage = total > 0 ? ((d.value / total) * 100).toFixed(1) : 0
-                                return (
+                                 return (
                                   <tr key={i}>
                                     <td className="border border-gray-300 p-2 text-left flex items-center gap-2">
                                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
@@ -911,6 +922,11 @@ export default function AdminSurveyResults() {
                                   </tr>
                                 )
                               })}
+                              <tr className="bg-gray-50 font-bold">
+                                <td className="border border-gray-300 p-2 text-right">TOPLAM CEVAP:</td>
+                                <td className="border border-gray-300 p-2 text-center">{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
+                                <td className="border border-gray-300 p-2 text-center">%100</td>
+                              </tr>
                             </tbody>
                           </table>
                         </div>
