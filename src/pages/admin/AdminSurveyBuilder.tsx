@@ -176,6 +176,9 @@ export default function AdminSurveyBuilder() {
       })
       if (rpcError) throw rpcError
 
+      // Slug senkronizasyonunu garantiye al (RPC bazen slug güncellemiyor olabilir)
+      await httpFrom('surveys').update({ slug: finalSlug }).eq('id', surveyId).execute()
+
       // ── ADIM 3: Soruları Senkronize Et
       // Mevcut soruları çek (IDsini bildiklerimizi güncellemek, bilmediklerimizi silmek için)
       const { data: dbQuestions } = await httpFrom('questions').select('id').eq('survey_id', surveyId).execute()
