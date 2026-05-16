@@ -28,7 +28,7 @@ export default function AdminSurveyResults() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'participants' | 'report' | 'score_report' | 'chart_report'>('participants')
+  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report'>('list')
 
   // Rapor Ayarları
   const [pageSize, setPageSize] = useState<'a4' | 'a3'>('a4')
@@ -60,34 +60,19 @@ export default function AdminSurveyResults() {
         ])
 
         // 2. Yanıtları al (Join yerine düz çekip sonra kendimiz eşleştireceğiz - Daha güvenli)
-        const qResp = httpFrom('responses').select('*')
-        qResp.eq('survey_id', id!)
-        qResp.eq('is_complete', 'true')
-        qResp.order('completed_at', { ascending: false })
-        
-        const responsesRes = await qResp.execute()
-        const rawResponses = responsesRes.data || []
-
-        // 3. Eğer yanıt varsa, bu yanıtlara ait tüm cevapları tek seferde çek
-        let enrichedResponses = rawResponses
-        if (rawResponses.length > 0) {
-          const responseIds = rawResponses.map((r: any) => r.id)
-          const qAns = httpFrom('response_answers').select('*')
-          qAns.in('response_id', responseIds)
-          
-          const answersRes = await qAns.execute()
-          const allAnswers = answersRes.data || []
-
-          // Cevapları yanıtlarla eşleştir
-          enrichedResponses = rawResponses.map((r: any) => ({
-            ...r,
-            response_answers: allAnswers.filter((a: any) => a.response_id === r.id)
-          }))
+        const { data, error } = await httpFrom('responses')
+        .select('*, response_answers(*)')
+        .eq('survey_id', id!)
+        .eq('is_complete', 'true')
+        .order('completed_at', { ascending: false })
+        if (error) {
+          console.error('Fetch error:', error)
+          throw error
         }
-
-        setSurvey(surveyRes.data)
+        const rawResponses = data || []
+        console.log('Fetched responses:', rawResponses.length)
         setQuestions(questionsRes.data || [])
-        setResponses(enrichedResponses)
+        setResponses(rawResponses.map((r: any) => ({ ...r, response_answers: r.response_answers })))
       } catch (err) {
         console.error('Sonuçlar yüklenemedi:', err)
       } finally {
@@ -170,8 +155,6 @@ export default function AdminSurveyResults() {
     if (!response.response_answers || response.response_answers.length === 0) return null
     const ansById = response.response_answers.find((a: any) => a.question_id === question.id)
     if (ansById) return ansById
-    const qIdx = questions.findIndex(q => q.id === question.id)
-    if (qIdx !== -1 && response.response_answers[qIdx]) return response.response_answers[qIdx]
     return null
   }
 
@@ -283,17 +266,29 @@ export default function AdminSurveyResults() {
     return { weights, rows: scoreRows, options }
   }, [reportData, filteredResponses.length])
 
-  const exportPDF = () => {
-    const element = document.getElementById('report-table-print-area')
+  const exportPDF = async () => {
+    const element = document.getElementById('chart-report-content')
     if (!element) return
+
     const opt = {
-      margin:       0,
-      filename:     `${survey?.title || 'Rapor'}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      margin: 10,
+      filename: `anket-grafik-rapor-${survey?.id}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 2, 
+        useCORS: true, 
+        letterRendering: true,
+        logging: false
+      },
+      jsPDF: { unit: 'mm', format: pageSize, orientation: orientation }
     }
-    html2pdf().set(opt).from(element).save()
+
+    try {
+      // @ts-ignore
+      await html2pdf().set(opt).from(element).save()
+    } catch (err) {
+      console.error('PDF Export Error:', err)
+    }
   }
 
   const exportReportExcel = () => {
@@ -318,7 +313,8 @@ export default function AdminSurveyResults() {
             const val = getAnswerValue(ans)
             // Checkbox ise virgülle ayrılmış olabilir
             if (q.type === 'checkbox') {
-              if (val.split(', ').includes(opt)) count++
+              const selectedOpts = val.split(', ').map(s => s.trim())
+              if (selectedOpts.includes(opt)) count++
             } else {
               if (val === opt) count++
             }
@@ -329,10 +325,11 @@ export default function AdminSurveyResults() {
         return {
           id: q.id,
           title: q.title,
-          data: data.filter(d => d.value > 0) // Sadece yanıtı olanları göster (isteğe bağlı)
+          data: data, // Tüm seçenekleri tutuyoruz (tablo için)
+          chartData: data.filter(d => d.value > 0) // Sadece verisi olanları grafik için
         }
       })
-      .filter(q => q.data.length > 0)
+      .filter(q => q.data.some(d => d.value > 0)) // En az bir cevap verilmiş soruları göster
   }, [questions, filteredResponses])
 
   const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
@@ -865,46 +862,55 @@ export default function AdminSurveyResults() {
                         <span>{idx + 1}.</span>
                         <span>{item.title}</span>
                       </h4>
-                      <div className="flex flex-col md:flex-row items-center gap-4">
-                        <div className="w-full h-[300px] max-w-[450px]">
+                      <div className="flex flex-col items-center gap-6">
+                        <div className="w-full h-[350px] max-w-[600px] bg-gray-50 rounded-lg p-4 border border-gray-100">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
-                                data={item.data}
+                                data={item.chartData}
                                 cx="50%"
                                 cy="50%"
-                                labelLine={false}
-                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                labelLine={true}
+                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, value }) => {
+                                  const radius = outerRadius + 25;
                                   const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
                                   const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
                                   return (
-                                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
-                                      {percent > 0.05 ? `${(percent * 100).toFixed(1)}%` : ''}
+                                    <text x={x} y={y} fill="#1a1a1a" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-[11px] font-bold">
+                                      {`${name}: ${value} (${(percent * 100).toFixed(1)}%)`}
                                     </text>
                                   );
                                 }}
                                 innerRadius={0}
                                 outerRadius={100}
                                 dataKey="value"
+                                stroke="#fff"
+                                strokeWidth={2}
                               >
-                                {item.data.map((entry, index) => (
+                                {item.chartData.map((entry: any, index: number) => (
                                   <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(value: number) => [`${value} Yanıt`, 'Sayı']} />
-                              <Legend verticalAlign="bottom" height={36}/>
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                formatter={(value: number) => [`${value} Yanıt`, 'Sayı']} 
+                              />
+                              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '11px' }} />
                             </PieChart>
                           </ResponsiveContainer>
                         </div>
-                        <div className="flex-1 w-full">
-                          <div className="mb-2 text-xs font-bold text-dark-400">CEVAP DAĞILIMI</div>
-                          <table className="w-full text-xs border-collapse border border-gray-300">
+                        <div className="w-full max-w-[800px]">
+                          <div className="mb-3 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                            <div className="h-px flex-1 bg-gray-200"></div>
+                            CEVAP DAĞILIMI VE SAYILARI
+                            <div className="h-px flex-1 bg-gray-200"></div>
+                          </div>
+                          <table className="w-full text-xs border-collapse border border-gray-300 shadow-sm">
                             <thead>
-                              <tr className="bg-gray-100">
-                                <th className="border border-gray-300 p-2 text-left">Seçenek</th>
-                                <th className="border border-gray-300 p-2 text-center">Sayı</th>
-                                <th className="border border-gray-300 p-2 text-center">Oran</th>
+                              <tr className="bg-gray-100 text-gray-700">
+                                <th className="border border-gray-300 p-2.5 text-left">Cevap Seçeneği</th>
+                                <th className="border border-gray-300 p-2.5 text-center w-24">Sayı</th>
+                                <th className="border border-gray-300 p-2.5 text-center w-24">Oran</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -912,20 +918,22 @@ export default function AdminSurveyResults() {
                                 const total = item.data.reduce((acc, curr) => acc + curr.value, 0)
                                 const percentage = total > 0 ? ((d.value / total) * 100).toFixed(1) : 0
                                  return (
-                                  <tr key={i}>
-                                    <td className="border border-gray-300 p-2 text-left flex items-center gap-2">
-                                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
-                                      {d.name}
+                                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                    <td className="border border-gray-300 p-2.5 text-left">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
+                                        <span className="font-medium text-gray-800">{d.name}</span>
+                                      </div>
                                     </td>
-                                    <td className="border border-gray-300 p-2 text-center font-medium">{d.value}</td>
-                                    <td className="border border-gray-300 p-2 text-center font-medium">%{percentage}</td>
+                                    <td className="border border-gray-300 p-2.5 text-center font-bold text-gray-900">{d.value}</td>
+                                    <td className="border border-gray-300 p-2.5 text-center font-bold text-primary-600">%{percentage}</td>
                                   </tr>
                                 )
                               })}
-                              <tr className="bg-gray-50 font-bold">
-                                <td className="border border-gray-300 p-2 text-right">TOPLAM CEVAP:</td>
-                                <td className="border border-gray-300 p-2 text-center">{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
-                                <td className="border border-gray-300 p-2 text-center">%100</td>
+                              <tr className="bg-gray-100 font-bold text-gray-900">
+                                <td className="border border-gray-300 p-2.5 text-right uppercase text-[10px]">Toplam Yanıtlanan Soru Sayısı:</td>
+                                <td className="border border-gray-300 p-2.5 text-center">{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
+                                <td className="border border-gray-300 p-2.5 text-center">%100</td>
                               </tr>
                             </tbody>
                           </table>

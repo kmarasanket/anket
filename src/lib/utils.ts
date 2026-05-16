@@ -8,15 +8,48 @@ export function cn(...inputs: ClassValue[]) {
 // IP hash - ham IP saklamak yerine SHA-256 hash kullan
 export async function hashIP(ip: string): Promise<string> {
   const salt = import.meta.env.VITE_IP_SALT || 'anket-platform-salt-2024'
-  const data = new TextEncoder().encode(ip + salt)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  const text = ip + salt
+  
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const data = new TextEncoder().encode(text)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    }
+  } catch (e) {
+    console.warn('Crypto.subtle not available, using fallback hash')
+  }
+
+  // Fallback: Simple string hash (non-cryptographic but consistent)
+  let hash = 0
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return 'f-' + Math.abs(hash).toString(16)
 }
 
-// Benzersiz session token oluştur
-export function generateSessionToken(): string {
-  return crypto.randomUUID()
+export const generateUUID = () => {
+  // crypto.randomUUID fallback for non-secure contexts (XAMPP/HTTP)
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch (e) {}
+
+  // Fallback for non-secure contexts (HTTP)
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
+// Session token (non-UUID, used for cookies/session tracking)
+export const generateSessionToken = (): string => {
+  return 'sess_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
 }
 
 // Cookie işlemleri

@@ -5,14 +5,17 @@ import {
   ExternalLink, Globe, Building2, ChevronRight, X, Check
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { formatDate, slugify } from '../../lib/utils'
+import { slugify, generateUUID } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { useAuthStore } from '../../stores/authStore'
+import { httpFrom } from '../../lib/supabaseHttp'
 
 export default function SASurveysPage() {
   const [surveys, setSurveys] = useState<any[]>([])
   const [tenants, setTenants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const { profile } = useAuthStore()
   
   // Clone Modal States
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false)
@@ -25,14 +28,17 @@ export default function SASurveysPage() {
     setLoading(true)
     try {
       const [surveysRes, tenantsRes] = await Promise.all([
-        supabase.from('surveys').select('*, tenants(name)').order('created_at', { ascending: false }),
-        supabase.from('tenants').select('id, name').eq('is_active', true).order('name')
+        httpFrom('surveys').select('*, tenants(name)').order('created_at', { ascending: false }).execute(),
+        httpFrom('tenants').select('id, name').eq('is_active', 'true').order('name').execute()
       ])
       
+      if (surveysRes.error) throw surveysRes.error
+      if (tenantsRes.error) throw tenantsRes.error
+
       setSurveys(surveysRes.data || [])
       setTenants(tenantsRes.data || [])
     } catch (err: any) {
-      addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
+      addNotification('Anketler yüklenirken bir hata oluştu: ' + (err.message || ''), 'error')
     } finally {
       setLoading(false)
     }
@@ -42,43 +48,52 @@ export default function SASurveysPage() {
 
   const filtered = surveys.filter(s => 
     s.title.toLowerCase().includes(search.toLowerCase()) ||
-    s.tenants?.name.toLowerCase().includes(search.toLowerCase())
+    s.tenants?.name?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleClone = async () => {
-    if (!selectedSurvey || !targetTenantId) return
+    if (!selectedSurvey || !targetTenantId || !profile) return
     
     setCloning(true)
     try {
       // 1. Orijinal anketi ve sorularını çek
-      const { data: originalQuestions } = await supabase
-        .from('questions')
+      const { data: originalQuestions, error: qFetchError } = await httpFrom('questions')
         .select('*')
         .eq('survey_id', selectedSurvey.id)
         .order('order_index')
+        .execute()
+
+      if (qFetchError) throw qFetchError
 
       // 2. Yeni anketi oluştur
       const newSlug = `${slugify(selectedSurvey.title)}-${Math.random().toString(36).substr(2, 5)}`
-      const { data: newSurvey, error: surveyError } = await supabase
-        .from('surveys')
-        .insert({
-          tenant_id: targetTenantId,
-          title: `${selectedSurvey.title} (Kopya)`,
-          description: selectedSurvey.description,
-          slug: newSlug,
-          status: 'draft', // Kopya her zaman taslak başlar
-          welcome_message: selectedSurvey.welcome_message,
-          thank_you_message: selectedSurvey.thank_you_message,
-          settings: selectedSurvey.settings
-        })
-        .select()
-        .single()
+      
+      const newSurveyId = generateUUID()
+      const surveyPayload = {
+        id: newSurveyId,
+        tenant_id: targetTenantId,
+        title: `${selectedSurvey.title} (Kopya)`,
+        description: selectedSurvey.description,
+        slug: newSlug,
+        status: 'draft',
+        welcome_message: selectedSurvey.welcome_message,
+        thank_you_message: selectedSurvey.thank_you_message,
+        settings: selectedSurvey.settings,
+        created_by: profile.id,
+        created_at: new Date().toISOString()
+      }
+
+      const { data: newSurveyArr, error: surveyError } = await httpFrom('surveys')
+        .insert(surveyPayload, { returnData: true })
 
       if (surveyError) throw surveyError
+      
+      const newSurvey = Array.isArray(newSurveyArr) ? newSurveyArr[0] : newSurveyArr
+      if (!newSurvey || !newSurvey.id) throw new Error('Anket oluşturuldu ancak ID alınamadı.')
 
       // 3. Soruları kopyala
       if (originalQuestions && originalQuestions.length > 0) {
-        const questionsToInsert = originalQuestions.map(q => ({
+        const questionsToInsert = originalQuestions.map((q: any) => ({
           survey_id: newSurvey.id,
           type: q.type,
           title: q.title,
@@ -89,7 +104,7 @@ export default function SASurveysPage() {
           is_required: q.is_required
         }))
         
-        const { error: questionsError } = await supabase.from('questions').insert(questionsToInsert)
+        const { error: questionsError } = await httpFrom('questions').insert(questionsToInsert)
         if (questionsError) throw questionsError
       }
 
@@ -97,8 +112,8 @@ export default function SASurveysPage() {
       setIsCloneModalOpen(false)
       fetchData()
     } catch (err: any) {
-      console.error(err)
-      addNotification('Kopyalama sırasında bir hata oluştu: ' + (err.message || ''), 'error')
+      console.error('Clone error:', err)
+      addNotification('Kopyalama sırasında bir hata oluştu: ' + (err.message || 'Bilinmeyen hata'), 'error')
     } finally {
       setCloning(false)
     }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Building2, ArrowRight } from 'lucide-react'
 import { httpFrom } from '../../lib/supabaseHttp'
-import { cookies, generateSessionToken, hashIP } from '../../lib/utils'
+import { cookies, generateSessionToken, hashIP, generateUUID } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
 
 export default function PublicSurveyPage() {
@@ -180,7 +180,7 @@ export default function PublicSurveyPage() {
 
       // ÖNEMLİ: RLS Select yetkisi olmayan public sayfalarda 'returnData' (return=representation) 
       // bazen boş dönebilir ([]). Bu yüzden ID'yi client tarafında üretip gönderiyoruz.
-      const responseId = crypto.randomUUID()
+      const responseId = generateUUID()
 
       // Yanıtı kaydet - metadata minimum tutulur (depolama tasarrufu)
       const ua = navigator.userAgent
