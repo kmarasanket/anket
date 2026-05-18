@@ -28,7 +28,7 @@ export default function AdminSurveyResults() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report'>('list')
+  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report' | 'exec_summary' | 'trend_report' | 'cross_tab' | 'word_cloud'>('list')
 
   // Rapor Ayarları (Sabit A4 - Dikey)
 
@@ -278,6 +278,39 @@ export default function AdminSurveyResults() {
 
     return { weights, rows: scoreRows, options }
   }, [reportData, filteredResponses.length])
+
+  // Kelime Bulutu Verisi
+  const wordCloudData = useMemo(() => {
+    const textQuestions = questions.filter(q => q.type === 'text' || q.type === 'textarea')
+    if (textQuestions.length === 0) return null
+
+    const wordsMap: Record<string, number> = {}
+    const stopWords = ['ve', 'ile', 'bir', 'çok', 'da', 'de', 'için', 'bu', 'gibi', 'kadar', 'daha', 'en', 'var', 'yok', 'olan', 'ama', 'fakat', 'ise', 'ki']
+
+    filteredResponses.forEach(r => {
+      textQuestions.forEach(q => {
+        const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
+        if (ans && ans.answer_text) {
+          const text = ans.answer_text.toLocaleLowerCase('tr-TR')
+          // Extract words with 3+ characters (basic Turkish letter support)
+          const words = text.match(/[a-zçğıöşü]{3,}/g) || [] 
+          words.forEach((w: string) => {
+            if (!stopWords.includes(w)) {
+              wordsMap[w] = (wordsMap[w] || 0) + 1
+            }
+          })
+        }
+      })
+    })
+
+    const wordsArr = Object.entries(wordsMap)
+      .map(([text, value]) => ({ text, value }))
+      .filter(w => w.value > 1)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 50)
+
+    return wordsArr.length > 0 ? wordsArr : null
+  }, [questions, filteredResponses])
 
   const exportPDF = async () => {
     const element = document.getElementById('chart-report-content')
@@ -576,6 +609,34 @@ export default function AdminSurveyResults() {
         >
           <PieChartIcon className="w-4 h-4" />
           Soru Bazında Analiz (Grafik)
+        </button>
+        <button 
+          onClick={() => setActiveTab('exec_summary')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'exec_summary' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
+        >
+          <LayoutList className="w-4 h-4" />
+          Yönetici Özeti
+        </button>
+        <button 
+          onClick={() => setActiveTab('trend_report')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'trend_report' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
+        >
+          <Activity className="w-4 h-4" />
+          Trend Analizi
+        </button>
+        <button 
+          onClick={() => setActiveTab('cross_tab')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'cross_tab' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
+        >
+          <Users className="w-4 h-4" />
+          Çapraz Analiz
+        </button>
+        <button 
+          onClick={() => setActiveTab('word_cloud')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'word_cloud' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
+        >
+          <FileText className="w-4 h-4" />
+          Kelime Bulutu
         </button>
       </div>
 
@@ -1044,6 +1105,141 @@ export default function AdminSurveyResults() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Yönetici Özeti Sekmesi */}
+      {activeTab === 'exec_summary' && (
+        <div className="card p-5 space-y-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-dark-100 flex items-center gap-3">
+              <LayoutList className="w-5 h-5 text-primary-400" />
+              Yönetici Özeti (Executive Summary)
+            </h3>
+          </div>
+
+          {!scoreReportData || scoreReportData.rows.length === 0 ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Bu rapor için puanlanabilir soru bulunamadı.</p>
+            </div>
+          ) : (
+            <div className="space-y-6" id="exec-summary-print-area">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-dark-900 border border-dark-800 rounded-xl p-6 flex flex-col justify-center items-center text-center">
+                  <p className="text-dark-400 font-medium mb-2">Genel Memnuniyet Skoru</p>
+                  <div className="text-5xl font-black text-primary-400">
+                    %{Math.round(scoreReportData.rows.reduce((acc, r) => acc + r.percentage, 0) / scoreReportData.rows.length)}
+                  </div>
+                </div>
+                <div className="bg-dark-900 border border-dark-800 rounded-xl p-6 flex flex-col justify-center items-center text-center">
+                  <p className="text-dark-400 font-medium mb-2">Ankete Katılan Kişi Sayısı</p>
+                  <div className="text-5xl font-black text-emerald-400">
+                    {filteredResponses.length}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-dark-900 border border-emerald-500/20 rounded-xl p-6">
+                  <h4 className="text-emerald-400 font-bold mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    En Başarılı 3 Konu
+                  </h4>
+                  <div className="space-y-4">
+                    {[...scoreReportData.rows].sort((a, b) => b.percentage - a.percentage).slice(0, 3).map((row, i) => (
+                      <div key={i} className="flex flex-col gap-1 pb-3 border-b border-dark-800 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-start gap-4">
+                          <p className="text-sm text-dark-100 flex-1">{row.question}</p>
+                          <span className="font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                            %{row.percentage}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-dark-900 border border-red-500/20 rounded-xl p-6">
+                  <h4 className="text-red-400 font-bold mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    İyileştirmeye Açık 3 Konu
+                  </h4>
+                  <div className="space-y-4">
+                    {[...scoreReportData.rows].sort((a, b) => a.percentage - b.percentage).slice(0, 3).map((row, i) => (
+                      <div key={i} className="flex flex-col gap-1 pb-3 border-b border-dark-800 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-start gap-4">
+                          <p className="text-sm text-dark-100 flex-1">{row.question}</p>
+                          <span className="font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">
+                            %{row.percentage}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Kelime Bulutu Sekmesi */}
+      {activeTab === 'word_cloud' && (
+        <div className="card p-5 space-y-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-dark-100 flex items-center gap-3">
+              <FileText className="w-5 h-5 text-primary-400" />
+              Kelime Bulutu (Açık Uçlu Yorumlar)
+            </h3>
+          </div>
+
+          {!wordCloudData ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Ankette açık uçlu (metin) soru bulunmuyor veya hiç yorum yapılmamış.</p>
+            </div>
+          ) : (
+            <div className="bg-dark-900 border border-dark-800 rounded-xl p-8 flex flex-wrap justify-center items-center gap-4 min-h-[300px]">
+              {wordCloudData.map((word, i) => {
+                const maxVal = wordCloudData[0].value;
+                const minVal = wordCloudData[wordCloudData.length - 1].value;
+                // Normalize font size between 14px and 48px
+                const fontSize = minVal === maxVal ? 24 : 14 + ((word.value - minVal) / (maxVal - minVal)) * 34;
+                
+                // Assign a random appealing color
+                const colors = ['text-primary-400', 'text-emerald-400', 'text-amber-400', 'text-red-400', 'text-purple-400', 'text-cyan-400', 'text-pink-400'];
+                const color = colors[i % colors.length];
+
+                return (
+                  <span 
+                    key={i} 
+                    className={`${color} font-bold transition-all hover:scale-110 cursor-default`}
+                    style={{ fontSize: `${fontSize}px`, lineHeight: 1 }}
+                    title={`${word.value} kez kullanıldı`}
+                  >
+                    {word.text}
+                  </span>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trend Analizi Sekmesi */}
+      {activeTab === 'trend_report' && (
+        <div className="card p-12 text-center border border-dashed border-dark-700 rounded-xl">
+          <Activity className="w-12 h-12 text-primary-500/50 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-dark-100 mb-2">Trend Analizi</h3>
+          <p className="text-dark-300">Bu modül yapım aşamasındadır. Yakında aylara göre memnuniyet değişim grafiklerini buradan takip edebileceksiniz.</p>
+        </div>
+      )}
+
+      {/* Çapraz Analiz Sekmesi */}
+      {activeTab === 'cross_tab' && (
+        <div className="card p-12 text-center border border-dashed border-dark-700 rounded-xl">
+          <Users className="w-12 h-12 text-primary-500/50 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-dark-100 mb-2">Çapraz Analiz (Demografik Kırılım)</h3>
+          <p className="text-dark-300">Bu modül yapım aşamasındadır. Yakında "Meslek Gruplarına Göre Memnuniyet" gibi detaylı çapraz analizler yapabileceksiniz.</p>
         </div>
       )}
 
