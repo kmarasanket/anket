@@ -685,7 +685,6 @@ export default function AdminSurveyResults() {
                 className="bg-white text-black shadow-2xl relative"
                 style={{ 
                   width: '200mm',
-                  minHeight: '287mm',
                   maxWidth: 'none', 
                   padding: '5mm', 
                   boxSizing: 'border-box',
