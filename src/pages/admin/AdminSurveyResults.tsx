@@ -660,7 +660,7 @@ export default function AdminSurveyResults() {
                 const element = document.getElementById('report-table-print-area')
                 if (!element) return
                 html2pdf().set({
-                  margin: [6, 6, 6, 6],
+                  margin: [5, 5, 5, 5],
                   filename: `${survey?.title || 'Rapor'}.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
                   html2canvas: { scale: 2, useCORS: true, letterRendering: true },
@@ -684,10 +684,10 @@ export default function AdminSurveyResults() {
                 id="report-table-print-area" 
                 className="bg-white text-black shadow-2xl relative"
                 style={{ 
-                  width: '210mm',
-                  minHeight: '297mm',
+                  width: '200mm',
+                  minHeight: '287mm',
                   maxWidth: 'none', 
-                  padding: '10mm', 
+                  padding: '5mm', 
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, sans-serif'
                 }}
@@ -807,7 +807,7 @@ export default function AdminSurveyResults() {
                 const element = document.getElementById('chart-report-print-area')
                 if (!element) return
                 html2pdf().set({
-                  margin: [8, 8, 8, 8],
+                  margin: [5, 5, 5, 5],
                   filename: `${survey?.title || 'Grafik Rapor'}.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
                   html2canvas: { scale: 2, useCORS: true, letterRendering: true },
@@ -830,9 +830,9 @@ export default function AdminSurveyResults() {
                 id="chart-report-print-area" 
                 className="bg-white text-black shadow-2xl"
                 style={{ 
-                  width: '190mm',
+                  width: '200mm',
                   maxWidth: 'none', 
-                  padding: '8mm', 
+                  padding: '5mm', 
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, sans-serif'
                 }}
