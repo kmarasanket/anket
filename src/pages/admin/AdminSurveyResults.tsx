@@ -862,26 +862,27 @@ export default function AdminSurveyResults() {
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5mm', flexWrap: 'nowrap' }}>
 
                         {/* SOL: Pasta Grafik */}
-                        <div style={{ flex: '0 0 55%', height: '200px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', padding: '4px' }}>
+                        <div style={{ flex: '0 0 65%', height: '220px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', padding: '4px' }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
                                 data={item.chartData}
                                 cx="50%"
                                 cy="45%"
-                                labelLine={true}
-                                label={({ cx, cy, midAngle, outerRadius, percent, name, value }) => {
-                                  const radius = outerRadius + 20;
+                                labelLine={false}
+                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                  if (percent < 0.04) return null;
+                                  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
                                   const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
                                   const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
                                   return (
-                                    <text x={x} y={y} fill="#1a1a1a" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" style={{ fontSize: '9px', fontWeight: 'bold' }}>
-                                      {`${name}: ${value} (%${(percent * 100).toFixed(1)})`}
+                                    <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" style={{ fontSize: '10px', fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                                      {`%${(percent * 100).toFixed(1)}`}
                                     </text>
                                   );
                                 }}
                                 innerRadius={0}
-                                outerRadius={70}
+                                outerRadius={85}
                                 dataKey="value"
                                 stroke="#fff"
                                 strokeWidth={2}
