@@ -30,9 +30,7 @@ export default function AdminSurveyResults() {
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report'>('list')
 
-  // Rapor Ayarları
-  const [pageSize, setPageSize] = useState<'a4' | 'a3'>('a4')
-  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
+  // Rapor Ayarları (Sabit A4 - Dikey)
 
   // Filtre modu: 'range' = tarih aralığı, 'month' = ay/yıl seçimi
   const [filterMode, setFilterMode] = useState<'range' | 'month'>('month')
@@ -652,25 +650,7 @@ export default function AdminSurveyResults() {
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-primary-400" />
               <h3 className="font-bold text-dark-100">Rapor Önizleme</h3>
-              <div className="flex items-center gap-2 bg-dark-800 p-1 rounded-lg">
-                <button 
-                  onClick={() => setPageSize('a4')} 
-                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a4' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >A4</button>
-                <button 
-                  onClick={() => setPageSize('a3')} 
-                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a3' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >A3</button>
-                <div className="w-px h-3 bg-dark-700 mx-1"></div>
-                <button 
-                  onClick={() => setOrientation('portrait')} 
-                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'portrait' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >Dikey</button>
-                <button 
-                  onClick={() => setOrientation('landscape')} 
-                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'landscape' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >Yatay</button>
-              </div>
+              {/* Butonlar kaldırıldı - Sabit A4 Dikey */}
             </div>
             <div className="flex gap-3">
               <button onClick={exportReportExcel} className="btn-md btn-secondary gap-2 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30">
@@ -684,7 +664,7 @@ export default function AdminSurveyResults() {
                   filename: `${survey?.title || 'Rapor'}.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
                   html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation },
+                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                   pagebreak: { mode: 'avoid-all' }
                 }).from(element).save()
               }} className="btn-md btn-primary gap-2">
@@ -704,9 +684,7 @@ export default function AdminSurveyResults() {
                 id="report-table-print-area" 
                 className="bg-white text-black shadow-2xl relative"
                 style={{ 
-                  width: orientation === 'portrait' 
-                    ? (pageSize === 'a4' ? '190mm' : '277mm') 
-                    : (pageSize === 'a4' ? '277mm' : '400mm'),
+                  width: '210mm',
                   maxWidth: 'none', 
                   padding: '6mm', 
                   boxSizing: 'border-box',
@@ -821,25 +799,7 @@ export default function AdminSurveyResults() {
             <div className="flex items-center gap-3">
               <PieChartIcon className="w-5 h-5 text-primary-400" />
               <h3 className="font-bold text-dark-100">SORU BAZINDA SONUÇ ANALİZİ (GRAFİK)</h3>
-              <div className="flex items-center gap-2 bg-dark-800 p-1 rounded-lg">
-                <button 
-                  onClick={() => setPageSize('a4')} 
-                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a4' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >A4</button>
-                <button 
-                  onClick={() => setPageSize('a3')} 
-                  className={`px-2 py-1 text-[10px] rounded ${pageSize === 'a3' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >A3</button>
-                <div className="w-px h-3 bg-dark-700 mx-1"></div>
-                <button 
-                  onClick={() => setOrientation('portrait')} 
-                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'portrait' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >Dikey</button>
-                <button 
-                  onClick={() => setOrientation('landscape')} 
-                  className={`px-2 py-1 text-[10px] rounded ${orientation === 'landscape' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}
-                >Yatay</button>
-              </div>
+              {/* Butonlar kaldırıldı - Sabit A4 Dikey */}
             </div>
             <div className="flex gap-3">
               <button onClick={() => {
@@ -850,7 +810,7 @@ export default function AdminSurveyResults() {
                   filename: `${survey?.title || 'Grafik Rapor'}.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
                   html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation },
+                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                   pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                 }).from(element).save()
               }} className="btn-md btn-primary gap-2">
@@ -869,9 +829,7 @@ export default function AdminSurveyResults() {
                 id="chart-report-print-area" 
                 className="bg-white text-black shadow-2xl"
                 style={{ 
-                  width: orientation === 'portrait' 
-                    ? (pageSize === 'a4' ? '190mm' : '277mm') 
-                    : (pageSize === 'a4' ? '277mm' : '400mm'),
+                  width: '190mm',
                   maxWidth: 'none', 
                   padding: '8mm', 
                   boxSizing: 'border-box',
