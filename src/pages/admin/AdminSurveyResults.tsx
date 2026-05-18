@@ -901,7 +901,7 @@ export default function AdminSurveyResults() {
                       </div>
 
                       {/* Yan yana: grafik + tablo */}
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5mm' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5mm', flexWrap: 'nowrap' }}>
 
                         {/* SOL: Pasta Grafik */}
                         <div style={{ flex: '0 0 55%', height: '200px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', padding: '4px' }}>
@@ -948,10 +948,10 @@ export default function AdminSurveyResults() {
                           </div>
                           <table style={{ width: '100%', fontSize: '8px', borderCollapse: 'collapse', border: '1px solid #d1d5db' }}>
                             <thead>
-                              <tr style={{ backgroundColor: '#f3f4f6' }}>
-                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'left', fontSize: '7px' }}>Cevap Seçeneği</th>
-                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px' }}>Sayı</th>
-                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px' }}>Oran</th>
+                              <tr style={{ backgroundColor: '#e0f2fe' }}>
+                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'left', fontSize: '7px', color: '#0369a1' }}>Cevap Seçeneği</th>
+                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px', color: '#0369a1' }}>Sayı</th>
+                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px', color: '#0369a1' }}>Oran</th>
                               </tr>
                             </thead>
                             <tbody>
