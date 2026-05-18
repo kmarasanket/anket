@@ -45,7 +45,7 @@ export default function AdminSurveyResults() {
     const loadResults = async () => {
       setLoading(true)
       try {
-        // 1. Anket + Sorular + Yanıtlar paralel çek
+        // 1. Anket + Sorular paralel çek
         const qSurvey = httpFrom('surveys').select('*')
         qSurvey.eq('id', id!)
 
@@ -53,26 +53,36 @@ export default function AdminSurveyResults() {
         qQuestions.eq('survey_id', id!)
         qQuestions.order('order_index', { ascending: true })
 
-        // 1. Önce anketi ve soruları al
         const [surveyRes, questionsRes] = await Promise.all([
-          qSurvey.single().execute(),
+          qSurvey.execute(),
           qQuestions.execute()
         ])
 
-        // 2. Yanıtları al (Join yerine düz çekip sonra kendimiz eşleştireceğiz - Daha güvenli)
+        if (surveyRes.error) throw surveyRes.error
+        if (questionsRes.error) throw questionsRes.error
+
+        // Anket verisini state'e yükle
+        const surveyData = Array.isArray(surveyRes.data) ? surveyRes.data[0] : surveyRes.data
+        if (!surveyData) throw new Error('Anket bulunamadı (ID eşleşmedi)')
+        setSurvey(surveyData)
+        setQuestions(questionsRes.data || [])
+
+        // 2. Yanıtları al (is_complete filtresi string olarak gönderiliyor - RLS uyumlu)
         const { data, error } = await httpFrom('responses')
-        .select('*, response_answers(*)')
-        .eq('survey_id', id!)
-        .eq('is_complete', 'true')
-        .order('completed_at', { ascending: false })
+          .select('*, response_answers(*)')
+          .eq('survey_id', id!)
+          .eq('is_complete', 'true')
+          .order('completed_at', { ascending: false })
+          .execute()
+
         if (error) {
-          console.error('Fetch error:', error)
+          console.error('Responses fetch error:', error)
           throw error
         }
         const rawResponses = data || []
         console.log('Fetched responses:', rawResponses.length)
-        setQuestions(questionsRes.data || [])
-        setResponses(rawResponses.map((r: any) => ({ ...r, response_answers: r.response_answers })))
+        setResponses(rawResponses.map((r: any) => ({ ...r, response_answers: r.response_answers || [] })))
+
       } catch (err) {
         console.error('Sonuçlar yüklenemedi:', err)
       } finally {
