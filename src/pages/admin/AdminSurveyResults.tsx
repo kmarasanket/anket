@@ -184,6 +184,11 @@ export default function AdminSurveyResults() {
     return String(raw)
   }
 
+  // Soru başlığındaki öneki temizle: "1-", "2.", "3) " → başlık metni
+  const stripQuestionPrefix = (title: string): string => {
+    return title.replace(/^\d+[-.)\s]+\s*/, '').trim()
+  }
+
   // Rapor Tablosu Verisi (Sadece ana ölçeğe sahip "radio" ve "checkbox" soruları)
   const reportData = useMemo(() => {
     const radioQuestions = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
@@ -223,7 +228,7 @@ export default function AdminSurveyResults() {
         const val = getAnswerValue(ans)
         if (options.includes(val)) counts[val]++
       })
-      return { question: q.title, counts }
+      return { question: stripQuestionPrefix(q.title), counts }
     })
 
     const totals: Record<string, number> = {}
@@ -892,7 +897,7 @@ export default function AdminSurveyResults() {
                     <div key={item.id} style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                       {/* Soru başlığı */}
                       <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '3mm', borderLeft: '3px solid #3b82f6', paddingLeft: '3mm' }}>
-                        {idx + 1}. {item.title}
+                        {idx + 1}. {stripQuestionPrefix(item.title)}
                       </div>
 
                       {/* Yan yana: grafik + tablo */}
