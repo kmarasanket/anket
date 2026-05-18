@@ -31,6 +31,7 @@ export default function AdminSurveyResults() {
   const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report' | 'exec_summary' | 'trend_report' | 'cross_tab' | 'word_cloud'>('list')
   const [crossCategoryQ, setCrossCategoryQ] = useState<string>('')
   const [crossTargetQ, setCrossTargetQ] = useState<string>('')
+  const [trendTargetQ, setTrendTargetQ] = useState<string>('')
 
   // Rapor Ayarları (Sabit A4 - Dikey)
 
@@ -477,8 +478,6 @@ export default function AdminSurveyResults() {
     return { tgtQ, chartData }
   }, [trendTargetQ, questions, responses])
 
-  // Trend State
-  const [trendTargetQ, setTrendTargetQ] = useState<string>('')
 
   const exportPDF = async () => {
     const element = document.getElementById('chart-report-content')
