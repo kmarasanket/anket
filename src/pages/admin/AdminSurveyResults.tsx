@@ -675,11 +675,12 @@ export default function AdminSurveyResults() {
                 const element = document.getElementById('report-table-print-area')
                 if (!element) return
                 html2pdf().set({
-                  margin: 10,
+                  margin: [6, 6, 6, 6],
                   filename: `${survey?.title || 'Rapor'}.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: { scale: 2 },
-                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation }
+                  html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation },
+                  pagebreak: { mode: 'avoid-all' }
                 }).from(element).save()
               }} className="btn-md btn-primary gap-2">
                 <Download className="w-4 h-4" /> PDF Olarak Kaydet
@@ -696,88 +697,106 @@ export default function AdminSurveyResults() {
             <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
               <div 
                 id="report-table-print-area" 
-                className="bg-white text-black shadow-2xl relative transition-all duration-300"
+                className="bg-white text-black shadow-2xl relative"
                 style={{ 
                   width: orientation === 'portrait' 
-                    ? (pageSize === 'a4' ? '210mm' : '297mm') 
-                    : (pageSize === 'a4' ? '297mm' : '420mm'),
-                  minHeight: orientation === 'portrait' 
-                    ? (pageSize === 'a4' ? '297mm' : '420mm') 
-                    : (pageSize === 'a4' ? '210mm' : '297mm'),
+                    ? (pageSize === 'a4' ? '190mm' : '277mm') 
+                    : (pageSize === 'a4' ? '277mm' : '400mm'),
                   maxWidth: 'none', 
-                  padding: '10mm', 
-                  boxSizing: 'border-box' 
+                  padding: '6mm', 
+                  boxSizing: 'border-box',
+                  fontFamily: 'Arial, sans-serif'
                 }}
               >
                 <style>{`
                   #report-table {
                     font-family: Arial, sans-serif;
-                    font-size: 11px;
+                    font-size: 8px;
                     width: 100%;
                     border-collapse: collapse;
                     color: black;
+                    table-layout: fixed;
                   }
                   #report-table th, #report-table td {
-                    border: 1px solid #444;
-                    padding: 6px 4px;
+                    border: 1px solid #555;
+                    padding: 2px 3px;
                     text-align: center;
                     vertical-align: middle;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                   }
                   #report-table .text-left { text-align: left; }
                   #report-table .font-bold { font-weight: bold; }
-                  #report-table .header-info td { border: none; padding: 2px 0; text-align: left; font-size: 12px; }
-                  #report-table th { background-color: #f3f4f6; font-weight: bold; }
+                  #report-table th { background-color: #e5e7eb; font-weight: bold; font-size: 8px; }
                   #report-table .bg-gray-100 { background-color: #f3f4f6 !important; }
-                  
-                  /* Satır hover efekti PDF'e yansımaz, sadece ekranda şık durur */
-                  @media screen {
-                    #report-table tr.hover-row:hover { background-color: #f9fafb; }
-                  }
+                  #report-table .q-col { width: 48%; }
+                  #report-table .opt-col { width: ${(52 / (reportData.options.length || 1)).toFixed(1)}%; }
                 `}</style>
                 
+                {/* Başlık */}
+                <div style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '2px solid black', paddingBottom: '3mm', marginBottom: '3mm' }}>
+                  SEÇENEK BAZINDA VERİLEN CEVAP SAYISI VE ORANI
+                </div>
+
+                {/* Üst Bilgi */}
+                <div style={{ fontSize: '8px', marginBottom: '3mm', lineHeight: '1.5' }}>
+                  <div>Anket Adı: <strong>{survey?.title}</strong></div>
+                  <div>Yıl/Ay: <strong>{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</strong></div>
+                  <div>Hastane Adı: <strong>{tenant?.name || '-'}</strong></div>
+                  <div>İlgili Dönemde Anket Uygulanan Kişi Sayısı: <strong>{filteredResponses.length}</strong></div>
+                </div>
+
+                {/* Ana Tablo */}
                 <table id="report-table">
-                  <tbody>
-                    <tr className="header-info"><td colSpan={reportData.options.length + 1} className="font-bold text-[24px] uppercase pb-6 border-b border-black" style={{ fontSize: '24px' }}>SEÇENEK BAZINDA VERİLEN CEVAP SAYISI VE ORANI</td></tr>
-                    <tr><td colSpan={reportData.options.length + 1} style={{height: '10px', border: 'none'}}></td></tr>
-                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>Anket Adı: <span className="font-bold">{survey?.title}</span></td></tr>
-                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>Yıl/Ay: <span className="font-bold">{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</span></td></tr>
-                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>Hastane Adı: <span className="font-bold">{tenant?.name || '-'}</span></td></tr>
-                    <tr className="header-info"><td colSpan={reportData.options.length + 1}>İlgili Dönemde Anket Uygulanan Kişi Sayısı: <span className="font-bold">{filteredResponses.length}</span></td></tr>
-                    <tr><td colSpan={reportData.options.length + 1} style={{height: '15px', border: 'none'}}></td></tr>
-                    
+                  <colgroup>
+                    <col className="q-col" />
+                    {reportData.options.map((_: string, i: number) => (
+                      <col key={i} className="opt-col" />
+                    ))}
+                  </colgroup>
+                  <thead>
                     <tr>
-                      <th className="text-left bg-gray-100" rowSpan={2} style={{ width: '45%' }}>SORULAR</th>
-                      <th colSpan={reportData.options.length} className="bg-gray-100">Cevap Seçeneği (Kişi Sayısı)</th>
+                      <th className="text-left q-col" rowSpan={2} style={{ width: '48%' }}>SORULAR</th>
+                      <th colSpan={reportData.options.length}>Cevap Seçeneği (Kişi Sayısı)</th>
                     </tr>
                     <tr>
                       {reportData.options.map((opt: string, i: number) => (
-                        <th key={i} className="bg-gray-100">{opt}</th>
+                        <th key={i}>{opt}</th>
                       ))}
                     </tr>
-                    
+                  </thead>
+                  <tbody>
                     {reportData.rows.map((row, i) => (
-                      <tr key={i} className="hover-row">
-                        <td className="text-left">{row.question}</td>
+                      <tr key={i}>
+                        <td className="text-left">{i + 1}-{row.question}</td>
                         {reportData.options.map((opt: string, j: number) => (
                           <td key={j}>{row.counts[opt]}</td>
                         ))}
                       </tr>
                     ))}
-                    
-                    <tr><td colSpan={reportData.options.length + 1} style={{height: '5px', border: 'none'}}></td></tr>
 
+                    {/* Alt Özet Satırları */}
                     <tr>
-                      <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Toplam Cevap Sayısı<br/><span className="font-normal text-[10px]">({reportData.options.join(', ')} Toplamı)</span></td>
+                      <td className="text-left font-bold bg-gray-100">
+                        Seçenek Bazında Verilen Toplam Cevap Sayısı<br/>
+                        <span style={{ fontWeight: 'normal', fontSize: '7px' }}>({reportData.options.join(', ')} Toplamı)</span>
+                      </td>
                       {reportData.options.map((opt: string, i: number) => (
                         <td key={i} className="font-bold bg-gray-100">{reportData.totals[opt]}</td>
                       ))}
                     </tr>
                     <tr>
-                      <td className="text-left font-bold bg-gray-100">Toplam Cevap Sayısı<br/><span className="font-normal text-[10px]">(Anketteki Soru Sayısı X Anket Uygulanan Kişi Sayısı)</span></td>
+                      <td className="text-left font-bold bg-gray-100">
+                        Toplam Cevap Sayısı<br/>
+                        <span style={{ fontWeight: 'normal', fontSize: '7px' }}>(Anketteki Soru Sayısı X Anket Uygulanan Kişi Sayısı)</span>
+                      </td>
                       <td colSpan={reportData.options.length} className="font-bold bg-gray-100">{reportData.grandTotal}</td>
                     </tr>
                     <tr>
-                      <td className="text-left font-bold bg-gray-100">Seçenek Bazında Verilen Cevap Oranı<br/><span className="font-normal text-[10px]">(Her Seçenekte Verilen Toplam Cevap Sayısı / Toplam Cevap Sayısı)</span></td>
+                      <td className="text-left font-bold bg-gray-100">
+                        Seçenek Bazında Verilen Cevap Oranı<br/>
+                        <span style={{ fontWeight: 'normal', fontSize: '7px' }}>(Her Seçenekte Verilen Toplam Cevap Sayısı / Toplam Cevap Sayısı)</span>
+                      </td>
                       {reportData.options.map((opt: string, i: number) => (
                         <td key={i} className="font-bold bg-gray-100">{reportData.percentages[opt]}</td>
                       ))}
@@ -789,6 +808,7 @@ export default function AdminSurveyResults() {
           )}
         </div>
       )}
+
 
       {activeTab === 'chart_report' && (
         <div className="card p-5">
@@ -821,11 +841,12 @@ export default function AdminSurveyResults() {
                 const element = document.getElementById('chart-report-print-area')
                 if (!element) return
                 html2pdf().set({
-                  margin: 10,
+                  margin: [8, 8, 8, 8],
                   filename: `${survey?.title || 'Grafik Rapor'}.pdf`,
                   image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: { scale: 2, useCORS: true },
-                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation }
+                  html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                  jsPDF: { unit: 'mm', format: pageSize, orientation: orientation },
+                  pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                 }).from(element).save()
               }} className="btn-md btn-primary gap-2">
                 <Download className="w-4 h-4" /> PDF Olarak Kaydet
@@ -841,58 +862,63 @@ export default function AdminSurveyResults() {
             <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
               <div 
                 id="chart-report-print-area" 
-                className="bg-white text-black shadow-2xl relative transition-all duration-300"
+                className="bg-white text-black shadow-2xl"
                 style={{ 
                   width: orientation === 'portrait' 
-                    ? (pageSize === 'a4' ? '210mm' : '297mm') 
-                    : (pageSize === 'a4' ? '297mm' : '420mm'),
-                  minHeight: orientation === 'portrait' 
-                    ? (pageSize === 'a4' ? '297mm' : '420mm') 
-                    : (pageSize === 'a4' ? '210mm' : '297mm'),
+                    ? (pageSize === 'a4' ? '190mm' : '277mm') 
+                    : (pageSize === 'a4' ? '277mm' : '400mm'),
                   maxWidth: 'none', 
-                  padding: '15mm', 
-                  boxSizing: 'border-box' 
+                  padding: '8mm', 
+                  boxSizing: 'border-box',
+                  fontFamily: 'Arial, sans-serif'
                 }}
               >
-                {/* Header Info (Same as other reports for consistency) */}
-                <div className="border-b-2 border-black pb-4 mb-6">
-                  <h1 className="text-2xl font-bold uppercase mb-4">SORU BAZINDA SONUÇ ANALİZİ (GRAFİK)</h1>
-                  <div className="grid grid-cols-1 gap-1 text-sm">
-                    <p>Anket Adı: <span className="font-bold">{survey?.title}</span></p>
-                    <p>Yıl/Ay: <span className="font-bold">{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</span></p>
-                    <p>Hastane Adı: <span className="font-bold">{tenant?.name || '-'}</span></p>
-                    <p>Anket Uygulanan Kişi Sayısı: <span className="font-bold">{filteredResponses.length}</span></p>
+                {/* Başlık */}
+                <div style={{ borderBottom: '2px solid black', paddingBottom: '4mm', marginBottom: '4mm' }}>
+                  <h1 style={{ fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', margin: 0, marginBottom: '3mm' }}>
+                    SORU BAZINDA SONUÇ ANALİZİ (GRAFİK)
+                  </h1>
+                  <div style={{ fontSize: '8px', lineHeight: '1.6' }}>
+                    <div>Anket Adı: <strong>{survey?.title}</strong></div>
+                    <div>Yıl/Ay: <strong>{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</strong></div>
+                    <div>Hastane Adı: <strong>{tenant?.name || '-'}</strong></div>
+                    <div>Anket Uygulanan Kişi Sayısı: <strong>{filteredResponses.length}</strong></div>
                   </div>
                 </div>
 
-                <div className="space-y-12">
+                {/* Her soru için: grafik SOL | tablo SAĞ */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8mm' }}>
                   {chartReportData.map((item, idx) => (
-                    <div key={item.id} className="break-inside-avoid">
-                      <h4 className="text-sm font-bold mb-4 flex gap-2">
-                        <span>{idx + 1}.</span>
-                        <span>{item.title}</span>
-                      </h4>
-                      <div className="flex flex-col items-center gap-6">
-                        <div className="w-full h-[350px] max-w-[600px] bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <div key={item.id} style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                      {/* Soru başlığı */}
+                      <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '3mm', borderLeft: '3px solid #3b82f6', paddingLeft: '3mm' }}>
+                        {idx + 1}. {item.title}
+                      </div>
+
+                      {/* Yan yana: grafik + tablo */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5mm' }}>
+
+                        {/* SOL: Pasta Grafik */}
+                        <div style={{ flex: '0 0 55%', height: '200px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', padding: '4px' }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
                                 data={item.chartData}
                                 cx="50%"
-                                cy="50%"
+                                cy="45%"
                                 labelLine={true}
-                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, value }) => {
-                                  const radius = outerRadius + 25;
+                                label={({ cx, cy, midAngle, outerRadius, percent, name, value }) => {
+                                  const radius = outerRadius + 20;
                                   const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
                                   const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
                                   return (
-                                    <text x={x} y={y} fill="#1a1a1a" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-[11px] font-bold">
-                                      {`${name}: ${value} (${(percent * 100).toFixed(1)}%)`}
+                                    <text x={x} y={y} fill="#1a1a1a" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" style={{ fontSize: '9px', fontWeight: 'bold' }}>
+                                      {`${name}: ${value} (%${(percent * 100).toFixed(1)})`}
                                     </text>
                                   );
                                 }}
                                 innerRadius={0}
-                                outerRadius={100}
+                                outerRadius={70}
                                 dataKey="value"
                                 stroke="#fff"
                                 strokeWidth={2}
@@ -902,48 +928,48 @@ export default function AdminSurveyResults() {
                                 ))}
                               </Pie>
                               <Tooltip 
-                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                contentStyle={{ borderRadius: '6px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontSize: '11px' }}
                                 formatter={(value: number) => [`${value} Yanıt`, 'Sayı']} 
                               />
-                              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '11px' }} />
+                              <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '8px' }} />
                             </PieChart>
                           </ResponsiveContainer>
                         </div>
-                        <div className="w-full max-w-[800px]">
-                          <div className="mb-3 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                            <div className="h-px flex-1 bg-gray-200"></div>
+
+                        {/* SAĞ: Veri Tablosu */}
+                        <div style={{ flex: '1', minWidth: 0 }}>
+                          <div style={{ fontSize: '7px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2mm', textAlign: 'center' }}>
                             CEVAP DAĞILIMI VE SAYILARI
-                            <div className="h-px flex-1 bg-gray-200"></div>
                           </div>
-                          <table className="w-full text-xs border-collapse border border-gray-300 shadow-sm">
+                          <table style={{ width: '100%', fontSize: '8px', borderCollapse: 'collapse', border: '1px solid #d1d5db' }}>
                             <thead>
-                              <tr className="bg-gray-100 text-gray-700">
-                                <th className="border border-gray-300 p-2.5 text-left">Cevap Seçeneği</th>
-                                <th className="border border-gray-300 p-2.5 text-center w-24">Sayı</th>
-                                <th className="border border-gray-300 p-2.5 text-center w-24">Oran</th>
+                              <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'left', fontSize: '7px' }}>Cevap Seçeneği</th>
+                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px' }}>Sayı</th>
+                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px' }}>Oran</th>
                               </tr>
                             </thead>
                             <tbody>
                               {item.data.map((d, i) => {
                                 const total = item.data.reduce((acc, curr) => acc + curr.value, 0)
-                                const percentage = total > 0 ? ((d.value / total) * 100).toFixed(1) : 0
-                                 return (
-                                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                    <td className="border border-gray-300 p-2.5 text-left">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
-                                        <span className="font-medium text-gray-800">{d.name}</span>
+                                const percentage = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0'
+                                return (
+                                  <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'left' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0 }}></div>
+                                        <span style={{ fontWeight: '500' }}>{d.name}</span>
                                       </div>
                                     </td>
-                                    <td className="border border-gray-300 p-2.5 text-center font-bold text-gray-900">{d.value}</td>
-                                    <td className="border border-gray-300 p-2.5 text-center font-bold text-primary-600">%{percentage}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', fontWeight: 'bold' }}>{d.value}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', fontWeight: 'bold', color: '#2563eb' }}>%{percentage}</td>
                                   </tr>
                                 )
                               })}
-                              <tr className="bg-gray-100 font-bold text-gray-900">
-                                <td className="border border-gray-300 p-2.5 text-right uppercase text-[10px]">Toplam Yanıtlanan Soru Sayısı:</td>
-                                <td className="border border-gray-300 p-2.5 text-center">{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
-                                <td className="border border-gray-300 p-2.5 text-center">%100</td>
+                              <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold' }}>
+                                <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'right', fontSize: '7px', textTransform: 'uppercase' }}>TOPLAM YANITLANAN SORU SAYISI:</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center' }}>{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center' }}>%100</td>
                               </tr>
                             </tbody>
                           </table>
@@ -957,6 +983,7 @@ export default function AdminSurveyResults() {
           )}
         </div>
       )}
+
 
       {activeTab === 'score_report' && (
         <div className="card p-5">
