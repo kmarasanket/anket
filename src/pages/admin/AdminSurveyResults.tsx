@@ -665,7 +665,7 @@ export default function AdminSurveyResults() {
                   image: { type: 'jpeg', quality: 0.98 },
                   html2canvas: { scale: 2, useCORS: true, letterRendering: true },
                   jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                  pagebreak: { mode: 'avoid-all' }
+                  pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
                 }).from(element).save()
               }} className="btn-md btn-primary gap-2">
                 <Download className="w-4 h-4" /> PDF Olarak Kaydet
@@ -685,8 +685,9 @@ export default function AdminSurveyResults() {
                 className="bg-white text-black shadow-2xl relative"
                 style={{ 
                   width: '210mm',
+                  minHeight: '297mm',
                   maxWidth: 'none', 
-                  padding: '6mm', 
+                  padding: '10mm', 
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, sans-serif'
                 }}
@@ -694,15 +695,15 @@ export default function AdminSurveyResults() {
                 <style>{`
                   #report-table {
                     font-family: Arial, sans-serif;
-                    font-size: 8px;
+                    font-size: 10px;
                     width: 100%;
                     border-collapse: collapse;
                     color: black;
                     table-layout: fixed;
                   }
                   #report-table th, #report-table td {
-                    border: 1px solid #555;
-                    padding: 2px 3px;
+                    border: 1px solid #444;
+                    padding: 5px 4px;
                     text-align: center;
                     vertical-align: middle;
                     word-wrap: break-word;
@@ -710,19 +711,19 @@ export default function AdminSurveyResults() {
                   }
                   #report-table .text-left { text-align: left; }
                   #report-table .font-bold { font-weight: bold; }
-                  #report-table th { background-color: #e5e7eb; font-weight: bold; font-size: 8px; }
+                  #report-table th { background-color: #e5e7eb; font-weight: bold; font-size: 10px; }
                   #report-table .bg-gray-100 { background-color: #f3f4f6 !important; }
                   #report-table .q-col { width: 48%; }
                   #report-table .opt-col { width: ${(52 / (reportData.options.length || 1)).toFixed(1)}%; }
                 `}</style>
                 
                 {/* Başlık */}
-                <div style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '2px solid black', paddingBottom: '3mm', marginBottom: '3mm' }}>
+                <div style={{ fontSize: '15px', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '2px solid black', paddingBottom: '3mm', marginBottom: '4mm' }}>
                   SEÇENEK BAZINDA VERİLEN CEVAP SAYISI VE ORANI
                 </div>
 
                 {/* Üst Bilgi */}
-                <div style={{ fontSize: '8px', marginBottom: '3mm', lineHeight: '1.5' }}>
+                <div style={{ fontSize: '10px', marginBottom: '4mm', lineHeight: '1.6' }}>
                   <div>Anket Adı: <strong>{survey?.title}</strong></div>
                   <div>Yıl/Ay: <strong>{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</strong></div>
                   <div>Hastane Adı: <strong>{tenant?.name || '-'}</strong></div>
