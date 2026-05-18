@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText, PieChart as PieChartIcon } from 'lucide-react'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import html2pdf from 'html2pdf.js'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDateTime } from '../../lib/utils'
@@ -29,6 +29,8 @@ export default function AdminSurveyResults() {
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report' | 'exec_summary' | 'trend_report' | 'cross_tab' | 'word_cloud'>('list')
+  const [crossCategoryQ, setCrossCategoryQ] = useState<string>('')
+  const [crossTargetQ, setCrossTargetQ] = useState<string>('')
 
   // Rapor Ayarları (Sabit A4 - Dikey)
 
@@ -311,6 +313,172 @@ export default function AdminSurveyResults() {
 
     return wordsArr.length > 0 ? wordsArr : null
   }, [questions, filteredResponses])
+
+  // Çapraz Analiz için Soru Kırılımları
+  const crossTabQuestions = useMemo(() => {
+    const radioQuestions = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
+    
+    // Ana seçenekleri bul
+    const optionCounts: Record<string, { count: number, options: string[] }> = {}
+    radioQuestions.forEach(q => {
+      if (!q.options || q.options.length === 0) return
+      const key = JSON.stringify(q.options)
+      if (!optionCounts[key]) optionCounts[key] = { count: 0, options: q.options }
+      optionCounts[key].count++
+    })
+    
+    let mainOptions: string[] = []
+    let maxCount = 0
+    Object.values(optionCounts).forEach(item => {
+      if (item.count > maxCount) {
+        maxCount = item.count
+        mainOptions = item.options
+      }
+    })
+
+    // Ana seçenek setine UYMAYANLAR demografik/kategori sorularıdır
+    const categoryQs = radioQuestions.filter(q => {
+      if (!q.options || q.options.length === 0) return false
+      return JSON.stringify(q.options) !== JSON.stringify(mainOptions)
+    })
+
+    // Ana seçenek setine UYANLAR ise memnuniyet/hedef sorulardır
+    const targetQs = radioQuestions.filter(q => {
+      if (!q.options) return false
+      return JSON.stringify(q.options) === JSON.stringify(mainOptions)
+    })
+
+    return { categoryQs, targetQs, mainOptions }
+  }, [questions])
+
+  // Set default questions for cross-tab and trend
+  useEffect(() => {
+    if (crossTabQuestions.categoryQs.length > 0 && !crossCategoryQ) {
+      setCrossCategoryQ(crossTabQuestions.categoryQs[0].id)
+    }
+    if (crossTabQuestions.targetQs.length > 0 && !crossTargetQ) {
+      setCrossTargetQ(crossTabQuestions.targetQs[0].id)
+    }
+    if (crossTabQuestions.targetQs.length > 0 && !trendTargetQ) {
+      setTrendTargetQ(crossTabQuestions.targetQs[0].id)
+    }
+  }, [crossTabQuestions])
+
+  // Çapraz Analiz Matrix Verisi
+  const crossTabData = useMemo(() => {
+    if (!crossCategoryQ || !crossTargetQ) return null
+    const catQ = questions.find(q => q.id === crossCategoryQ)
+    const tgtQ = questions.find(q => q.id === crossTargetQ)
+    if (!catQ || !tgtQ) return null
+
+    const catOptions = catQ.options || []
+    const tgtOptions = tgtQ.options || []
+
+    const matrix: Record<string, Record<string, number>> = {}
+    const catTotals: Record<string, number> = {}
+
+    catOptions.forEach((catOpt: string) => {
+      matrix[catOpt] = {}
+      catTotals[catOpt] = 0
+      tgtOptions.forEach((tgtOpt: string) => {
+        matrix[catOpt][tgtOpt] = 0
+      })
+    })
+
+    filteredResponses.forEach(r => {
+      const catAns = findResponseAnswer(r, catQ)
+      const tgtAns = findResponseAnswer(r, tgtQ)
+      const catVal = getAnswerValue(catAns)
+      const tgtVal = getAnswerValue(tgtAns)
+
+      if (catOptions.includes(catVal)) {
+        catTotals[catVal]++
+        if (tgtOptions.includes(tgtVal)) {
+          matrix[catVal][tgtVal]++
+        }
+      }
+    })
+
+    return { catQ, tgtQ, catOptions, tgtOptions, matrix, catTotals }
+  }, [crossCategoryQ, crossTargetQ, questions, filteredResponses])
+
+  // Trend Analizi Verisi (Tüm Zamanları Kapsar)
+  const trendData = useMemo(() => {
+    if (!trendTargetQ) return null
+    const tgtQ = questions.find(q => q.id === trendTargetQ)
+    if (!tgtQ) return null
+
+    const radioQuestions = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
+    const optionCounts: Record<string, { count: number, options: string[] }> = {}
+    radioQuestions.forEach(q => {
+      if (!q.options || q.options.length === 0) return
+      const key = JSON.stringify(q.options)
+      if (!optionCounts[key]) optionCounts[key] = { count: 0, options: q.options }
+      optionCounts[key].count++
+    })
+    let mainOptions: string[] = []
+    let maxCount = 0
+    Object.values(optionCounts).forEach(item => {
+      if (item.count > maxCount) {
+        maxCount = item.count
+        mainOptions = item.options
+      }
+    })
+    
+    const weights: Record<string, number> = {}
+    mainOptions.forEach((opt: string, idx: number) => {
+      weights[opt] = getOptionWeight(opt, idx, mainOptions.length)
+    })
+
+    const monthlyGroups: Record<string, { totalScore: number, maxPossible: number, count: number }> = {}
+
+    responses.forEach(r => {
+      if (!r.completed_at) return
+      const date = new Date(r.completed_at)
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const periodKey = `${year}-${month}`
+
+      if (!monthlyGroups[periodKey]) {
+        monthlyGroups[periodKey] = { totalScore: 0, maxPossible: 0, count: 0 }
+      }
+
+      const ans = findResponseAnswer(r, tgtQ)
+      const val = getAnswerValue(ans)
+
+      if (mainOptions.includes(val)) {
+        const weight = weights[val]
+        monthlyGroups[periodKey].totalScore += weight
+        monthlyGroups[periodKey].maxPossible += 4
+        monthlyGroups[periodKey].count++
+      }
+    })
+
+    const sortedPeriods = Object.keys(monthlyGroups).sort()
+    
+    const chartData = sortedPeriods.map(period => {
+      const { totalScore, maxPossible } = monthlyGroups[period]
+      const scorePercentage = maxPossible > 0 ? Math.round((totalScore / maxPossible) * 100) : 0
+      
+      const [y, m] = period.split('-')
+      // MONTH_NAMES is month 1-indexed probably or 0-indexed? 
+      // Turkish month names constant:
+      const months = ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+      const monthName = months[Number(m)] || m
+      const label = `${monthName} ${y}`
+
+      return {
+        period,
+        label,
+        Skor: scorePercentage
+      }
+    })
+
+    return { tgtQ, chartData }
+  }, [trendTargetQ, questions, responses])
+
+  // Trend State
+  const [trendTargetQ, setTrendTargetQ] = useState<string>('')
 
   const exportPDF = async () => {
     const element = document.getElementById('chart-report-content')
@@ -1227,19 +1395,220 @@ export default function AdminSurveyResults() {
 
       {/* Trend Analizi Sekmesi */}
       {activeTab === 'trend_report' && (
-        <div className="card p-12 text-center border border-dashed border-dark-700 rounded-xl">
-          <Activity className="w-12 h-12 text-primary-500/50 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-dark-100 mb-2">Trend Analizi</h3>
-          <p className="text-dark-300">Bu modül yapım aşamasındadır. Yakında aylara göre memnuniyet değişim grafiklerini buradan takip edebileceksiniz.</p>
+        <div className="card p-5 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-dark-800 pb-4">
+            <div>
+              <h3 className="font-bold text-dark-100 flex items-center gap-3">
+                <Activity className="w-5 h-5 text-primary-400" />
+                Dönemsel Memnuniyet Trend Analizi
+              </h3>
+              <p className="text-xs text-dark-400 mt-1">Sorunun aylara göre memnuniyet skorunun (0-100%) değişimini izleyin.</p>
+            </div>
+            
+            <div className="w-full sm:w-96">
+              <label className="block text-xs text-dark-400 mb-1.5 font-medium">Trendi İzlenecek Soru</label>
+              <select
+                value={trendTargetQ}
+                onChange={e => setTrendTargetQ(e.target.value)}
+                className="input w-full bg-dark-950 border-dark-800 h-10 text-sm text-dark-100"
+              >
+                {crossTabQuestions.targetQs.map(q => (
+                  <option key={q.id} value={q.id}>{stripQuestionPrefix(q.title)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {!trendData || trendData.chartData.length === 0 ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Bu soru için yeterli veri bulunamadı veya henüz yanıtlanmamış.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Trend Chart */}
+              <div className="bg-dark-950/50 p-6 rounded-xl border border-dark-800">
+                <h4 className="text-sm font-semibold text-dark-200 mb-6 flex items-center gap-2">
+                  <span>Aylık Skor Trendi (%) -</span>
+                  <span className="text-primary-400 font-bold">{stripQuestionPrefix(trendData.tgtQ.title)}</span>
+                </h4>
+                
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={trendData.chartData}
+                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorSkor" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                      <XAxis 
+                        dataKey="label" 
+                        stroke="#9ca3af" 
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis 
+                        domain={[0, 100]} 
+                        stroke="#9ca3af" 
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v) => `%${v}`}
+                      />
+                      <Tooltip
+                        contentStyle={{ 
+                          backgroundColor: '#111827', 
+                          border: '1px solid #374151', 
+                          borderRadius: '8px',
+                          color: '#f9fafb',
+                          fontSize: '12px'
+                        }}
+                        formatter={(value: any) => [`%${value}`, 'Memnuniyet Skoru']}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="Skor" 
+                        stroke="#3b82f6" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorSkor)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Trend Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-dark-900 border border-dark-800 rounded-xl p-5">
+                  <p className="text-xs text-dark-400 mb-1">En Yüksek Skor</p>
+                  <p className="text-2xl font-black text-emerald-400">
+                    %{Math.max(...trendData.chartData.map(d => d.Skor)) || 0}
+                  </p>
+                  <p className="text-[10px] text-dark-500 mt-1">
+                    Zirve Dönem: {trendData.chartData.length > 0 ? trendData.chartData.reduce((prev, current) => (prev.Skor > current.Skor) ? prev : current).label : '-'}
+                  </p>
+                </div>
+
+                <div className="bg-dark-900 border border-dark-800 rounded-xl p-5">
+                  <p className="text-xs text-dark-400 mb-1">En Düşük Skor</p>
+                  <p className="text-2xl font-black text-red-400">
+                    %{Math.min(...trendData.chartData.map(d => d.Skor)) || 0}
+                  </p>
+                  <p className="text-[10px] text-dark-500 mt-1">
+                    En Düşük Dönem: {trendData.chartData.length > 0 ? trendData.chartData.reduce((prev, current) => (prev.Skor < current.Skor) ? prev : current).label : '-'}
+                  </p>
+                </div>
+
+                <div className="bg-dark-900 border border-dark-800 rounded-xl p-5">
+                  <p className="text-xs text-dark-400 mb-1">Genel Ortalama Trendi</p>
+                  <p className="text-2xl font-black text-primary-400">
+                    %{Math.round(trendData.chartData.reduce((acc, d) => acc + d.Skor, 0) / trendData.chartData.length) || 0}
+                  </p>
+                  <p className="text-[10px] text-dark-500 mt-1">Son {trendData.chartData.length} ayın ortalaması</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Çapraz Analiz Sekmesi */}
       {activeTab === 'cross_tab' && (
-        <div className="card p-12 text-center border border-dashed border-dark-700 rounded-xl">
-          <Users className="w-12 h-12 text-primary-500/50 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-dark-100 mb-2">Çapraz Analiz (Demografik Kırılım)</h3>
-          <p className="text-dark-300">Bu modül yapım aşamasındadır. Yakında "Meslek Gruplarına Göre Memnuniyet" gibi detaylı çapraz analizler yapabileceksiniz.</p>
+        <div className="card p-5 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-dark-800 pb-4">
+            <div>
+              <h3 className="font-bold text-dark-100 flex items-center gap-3">
+                <Users className="w-5 h-5 text-primary-400" />
+                Çapraz Kırılım Analizi (Cross-Tabulation)
+              </h3>
+              <p className="text-xs text-dark-400 mt-1">Farklı demografik grupların (doktor, hemşire, birim vb.) anket sorularına verdikleri yanıt dağılımını kıyaslayın.</p>
+            </div>
+          </div>
+
+          {crossTabQuestions.categoryQs.length === 0 ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Ankette demografik veya kategorik kırılım yapılabilecek soru bulunamadı.</p>
+              <p className="text-xs text-dark-500 mt-1">Bu analiz için en az bir tane farklı seçeneklere sahip (Göreviniz, Biriminiz vb.) soru olmalıdır.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Dropdowns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-dark-900/50 p-4 rounded-xl border border-dark-800">
+                <div>
+                  <label className="block text-xs text-dark-400 mb-1.5 font-medium">1. Kırılım Seçeneği (Demografi)</label>
+                  <select
+                    value={crossCategoryQ}
+                    onChange={e => setCrossCategoryQ(e.target.value)}
+                    className="input w-full bg-dark-950 border-dark-800 h-10 text-sm text-dark-100"
+                  >
+                    {crossTabQuestions.categoryQs.map(q => (
+                      <option key={q.id} value={q.id}>{stripQuestionPrefix(q.title)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-dark-400 mb-1.5 font-medium">2. Hedef Soru (Analiz Edilecek Madde)</label>
+                  <select
+                    value={crossTargetQ}
+                    onChange={e => setCrossTargetQ(e.target.value)}
+                    className="input w-full bg-dark-950 border-dark-800 h-10 text-sm text-dark-100"
+                  >
+                    {crossTabQuestions.targetQs.map(q => (
+                      <option key={q.id} value={q.id}>{stripQuestionPrefix(q.title)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Matrix Table */}
+              {!crossTabData ? (
+                <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+                  <p className="text-dark-300">Lütfen analiz parametrelerini seçin.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-dark-800 rounded-xl shadow-inner">
+                  <table className="w-full border-collapse text-left text-sm text-dark-200">
+                    <thead>
+                      <tr className="bg-dark-900 border-b border-dark-800">
+                        <th className="p-4 font-bold text-dark-100 w-1/4">GRUP / KIRILIM ({stripQuestionPrefix(crossTabData.catQ.title)})</th>
+                        {crossTabData.tgtOptions.map((opt: string, i: number) => (
+                          <th key={i} className="p-4 font-semibold text-center text-dark-200">{opt}</th>
+                        ))}
+                        <th className="p-4 font-bold text-center text-dark-100">Toplam Yanıt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-800 bg-dark-950/20">
+                      {crossTabData.catOptions.map((catOpt: string, idx: number) => {
+                        const totalAnswers = crossTabData.catTotals[catOpt] || 0;
+                        return (
+                          <tr key={idx} className="hover:bg-dark-900/30 transition-colors">
+                            <td className="p-4 font-medium text-dark-100">{catOpt}</td>
+                            {crossTabData.tgtOptions.map((tgtOpt: string, i: number) => {
+                              const count = crossTabData.matrix[catOpt]?.[tgtOpt] || 0;
+                              const percent = totalAnswers > 0 ? Math.round((count / totalAnswers) * 100) : 0;
+                              return (
+                                <td key={i} className="p-4 text-center">
+                                  <div className="font-bold text-dark-50">{count}</div>
+                                  <div className="text-xs text-dark-400">%{percent}</div>
+                                </td>
+                              );
+                            })}
+                            <td className="p-4 text-center font-semibold text-primary-400 bg-primary-500/5">{totalAnswers}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
