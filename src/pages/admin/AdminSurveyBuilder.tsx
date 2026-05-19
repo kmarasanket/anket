@@ -79,7 +79,11 @@ export default function AdminSurveyBuilder() {
             slug: survey.slug,
             tenant_id: survey.tenant_id
           })
-          setQuestions(questionsRes.data || [])
+          const mappedQuestions = (questionsRes.data || []).map((q: any) => ({
+            ...q,
+            type: q.type === 'checkbox' ? 'radio' : q.type
+          }))
+          setQuestions(mappedQuestions)
         }
       } catch (err: any) {
         addNotification('Anket yüklenirken bir hata oluştu: ' + (err.message || ''), 'error')
