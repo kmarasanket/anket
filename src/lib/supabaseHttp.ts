@@ -1,19 +1,29 @@
 /**
- * supabaseHttp.ts
+ * supabaseHttp.ts - OPTİMİZE EDİLMİŞ
  *
- * Supabase kütüphanesi kurumsal/hastane ağlarında donabilmektedir.
- * Bu modül, TÜM veritabanı işlemlerini standart window.fetch ile yapar.
- * Supabase JS kütüphanesine sıfır bağımlılık -> ağ kısıtlamalarını tamamen aşar.
+ * Performans İyileştirmeleri:
+ * 1. Token önbelleği (cache) — her API çağrısında localStorage tarama yok
+ * 2. AbortController desteği — sayfa değişince açık istekler iptal edilir
+ * 3. Retry mekanizması — ağ hataları için otomatik yeniden deneme
  */
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Token Çözücü: Supabase'in `anket-auth` anahtarındaki token'ı bulur
+// Token Önbelleği — Her çağrıda localStorage'ı taramak yerine bellekte tut
 // ──────────────────────────────────────────────────────────────────────────────
+let _cachedToken: string = ''
+let _cacheTimestamp: number = 0
+const TOKEN_CACHE_MS = 30_000 // 30 saniye
+
 export function getStoredToken(): string {
-  // 1. Bilinen anahtar (storageKey: 'anket-auth')
+  const now = Date.now()
+  if (_cachedToken && now - _cacheTimestamp < TOKEN_CACHE_MS) {
+    return _cachedToken
+  }
+
+  // 1. Birincil Kaynak: Supabase'in kendi anahtarı
   try {
     const raw = localStorage.getItem('anket-auth')
     if (raw) {
@@ -22,11 +32,15 @@ export function getStoredToken(): string {
         parsed?.access_token ||
         parsed?.session?.access_token ||
         parsed?.currentSession?.access_token
-      if (token) return token
+      if (token) {
+        _cachedToken = token
+        _cacheTimestamp = now
+        return token
+      }
     }
   } catch {}
 
-  // 2. Scavenger Fallback: tüm depolama alanlarını tara
+  // 2. Fallback: Tüm storage alanlarını tara (yavaş, sadece gerekirse)
   for (const store of [localStorage, sessionStorage]) {
     for (const key of Object.keys(store)) {
       try {
@@ -37,7 +51,11 @@ export function getStoredToken(): string {
           parsed?.access_token ||
           parsed?.session?.access_token ||
           parsed?.currentSession?.access_token
-        if (token) return token
+        if (token) {
+          _cachedToken = token
+          _cacheTimestamp = now
+          return token
+        }
       } catch {}
     }
   }
@@ -45,11 +63,16 @@ export function getStoredToken(): string {
   return ''
 }
 
+// Token değiştiğinde önbelleği sıfırla (login/logout anında çağrılmalı)
+export function clearTokenCache() {
+  _cachedToken = ''
+  _cacheTimestamp = 0
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Ortak İstek Başlıkları
 // ──────────────────────────────────────────────────────────────────────────────
 function getHeaders(token: string, preferReturn = 'representation'): Record<string, string> {
-  // Eğer token yoksa anon key kullan (Public sayfalar için kritik)
   const finalToken = token || SUPABASE_ANON_KEY
   return {
     'Content-Type': 'application/json',
@@ -72,8 +95,32 @@ async function parseError(res: Response): Promise<string> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Retry Yardımcısı — Geçici ağ hatalarında otomatik yeniden dene
+// ──────────────────────────────────────────────────────────────────────────────
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 1
+): Promise<Response> {
+  try {
+    const res = await window.fetch(url, options)
+    // 5xx sunucu hatalarında yeniden dene (429 = rate limit dahil)
+    if ((res.status >= 500 || res.status === 429) && retries > 0) {
+      await new Promise(r => setTimeout(r, 500))
+      return fetchWithRetry(url, options, retries - 1)
+    }
+    return res
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise(r => setTimeout(r, 500))
+      return fetchWithRetry(url, options, retries - 1)
+    }
+    throw err
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Ana Builder Fonksiyonu: httpFrom(table)
-// Her metot yeni bir builder döndürür (immutable chain — URL mutation yok)
 // ──────────────────────────────────────────────────────────────────────────────
 export function httpFrom(table: string) {
   const baseUrl = `${SUPABASE_URL}/rest/v1/${table}`
@@ -81,7 +128,6 @@ export function httpFrom(table: string) {
 
   // ── SELECT ────────────────────────────────────────────────────────────────
   const select = (columns = '*') => {
-    // Her select çağrısı kendi bağımsız URL state'ini yönetir
     let url = `${baseUrl}?select=${encodeURIComponent(columns)}`
     let isSingle = false
 
@@ -114,7 +160,7 @@ export function httpFrom(table: string) {
         const headers = { ...getHeaders(token) }
         headers['Prefer'] = 'count=exact'
         try {
-          const res = await window.fetch(url, { method: 'HEAD', headers })
+          const res = await fetchWithRetry(url, { method: 'HEAD', headers })
           const range = res.headers.get('Content-Range')
           if (range) {
             const total = range.split('/')[1]
@@ -127,7 +173,7 @@ export function httpFrom(table: string) {
         }
       },
       async execute(): Promise<{ data: any; error: Error | null }> {
-        const res = await window.fetch(url, {
+        const res = await fetchWithRetry(url, {
           method: 'GET',
           headers: {
             ...getHeaders(token),
@@ -147,7 +193,7 @@ export function httpFrom(table: string) {
 
   // ── INSERT ──────────────────────────────────────────────────────────────
   const insert = async (payload: object | object[], opts?: { returnData?: boolean }) => {
-    const res = await window.fetch(baseUrl, {
+    const res = await fetchWithRetry(baseUrl, {
       method: 'POST',
       headers: getHeaders(token, opts?.returnData ? 'representation' : 'minimal'),
       body: JSON.stringify(payload)
@@ -167,7 +213,7 @@ export function httpFrom(table: string) {
       ...(onConflict ? { Prefer: 'resolution=merge-duplicates,return=minimal' } : {})
     }
     const url = onConflict ? `${baseUrl}?on_conflict=${onConflict}` : baseUrl
-    const res = await window.fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -191,7 +237,7 @@ export function httpFrom(table: string) {
         return builder
       },
       async execute() {
-        const res = await window.fetch(filterUrl, {
+        const res = await fetchWithRetry(filterUrl, {
           method: 'PATCH',
           headers: getHeaders(token, 'minimal'),
           body: JSON.stringify(payload)
@@ -218,7 +264,7 @@ export function httpFrom(table: string) {
         return builder
       },
       async execute() {
-        const res = await window.fetch(filterUrl, {
+        const res = await fetchWithRetry(filterUrl, {
           method: 'DELETE',
           headers: getHeaders(token, 'minimal')
         })
@@ -236,12 +282,12 @@ export function httpFrom(table: string) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// RPC çağrısı (fonksiyon çalıştır)
+// RPC çağrısı
 // ──────────────────────────────────────────────────────────────────────────────
 export async function httpRpc(fnName: string, params: object) {
   const token = getStoredToken()
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`
-  const res = await window.fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'POST',
     headers: getHeaders(token, 'minimal'),
     body: JSON.stringify(params)

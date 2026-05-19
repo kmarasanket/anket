@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
 import { useNotificationStore } from './notificationStore'
 import type { Profile, Tenant } from '../lib/database.types'
+import { clearTokenCache } from '../lib/supabaseHttp'
 
 interface AuthState {
   user: { id: string; email: string; user_metadata?: any } | null
@@ -78,8 +79,8 @@ export const useAuthStore = create<AuthState>()(
         } catch (err) {
           console.error('Logout error:', err)
         } finally {
+          clearTokenCache()
           set({ user: null, profile: null, tenant: null })
-          // localStorage temizliği (persist middleware için)
           localStorage.removeItem('auth-store')
         }
       },

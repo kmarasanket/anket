@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { FileText, Users, Eye, Plus, ChevronRight, Activity } from 'lucide-react'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { useAuthStore } from '../../stores/authStore'
-import { formatDate, formatDateTime } from '../../lib/utils'
+import { formatDateTime } from '../../lib/utils'
 
 export default function AdminDashboard() {
   const { tenant, profile } = useAuthStore()
@@ -15,48 +15,38 @@ export default function AdminDashboard() {
     if (!tenant?.id) return
     const loadData = async () => {
       try {
-        // Sadece bu kurumun aktif anketleri
-        const qSurveys = httpFrom('surveys').select('*')
-        qSurveys.eq('tenant_id', tenant.id)
-        qSurveys.eq('status', 'active')
-        qSurveys.order('created_at', { ascending: false })
-        const surveysRes = await qSurveys.execute()
+        // Tüm sorgular eş zamanlı başlatılır (waterfall yok)
+        const [surveysRes, completedRes, totalRes] = await Promise.all([
+          httpFrom('surveys')
+            .select('id,title,description,created_at,status,response_count')
+            .eq('tenant_id', tenant.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .execute(),
+          httpFrom('responses')
+            .select('id')
+            .eq('tenant_id', tenant.id)
+            .eq('is_complete', 'true')
+            .getCount(),
+          httpFrom('responses')
+            .select('id')
+            .eq('tenant_id', tenant.id)
+            .getCount(),
+        ])
 
-        // Sadece bu kurumun tamamlanan yanıtları
-        const totalResponses = await httpFrom('responses')
-          .select('id')
-          .eq('tenant_id', tenant.id)
-          .eq('is_complete', 'true')
-          .getCount()
-
-        // Sadece bu kurumun tüm yanıtları (oran için)
-        const totalAll = await httpFrom('responses')
-          .select('id')
-          .eq('tenant_id', tenant.id)
-          .getCount()
-
-        const active = surveysRes.data?.length || 0
-        const completedCount = totalResponses || 0
-        const total = totalAll || 0
+        const activeSurveys = surveysRes.data || []
+        const completedCount = completedRes || 0
+        const total = totalRes || 0
 
         setStats({
-          activeSurveys: active,
+          activeSurveys: activeSurveys.length,
           totalResponses: completedCount,
-          completionRate: total ? Math.round((completedCount / total) * 100) : 0
+          completionRate: total ? Math.round((completedCount / total) * 100) : 0,
         })
 
-        // Dashboard'da listelenecek anketlerin yanıt sayılarını al
-        const activeSurveys = surveysRes.data || []
-        const recentWithCounts = await Promise.all(activeSurveys.slice(0, 5).map(async (s: any) => {
-          const count = await httpFrom('responses')
-            .select('id')
-            .eq('survey_id', s.id)
-            .eq('is_complete', 'true')
-            .getCount()
-          return { ...s, real_response_count: count }
-        }))
-
-        setRecentSurveys(recentWithCounts)
+        // ✅ N+1 Sorgu Düzeltildi: Her anket için tek tek istek YOK
+        // Veritabanındaki response_count sütununu direkt kullanıyoruz
+        setRecentSurveys(activeSurveys.slice(0, 5))
       } catch (err) {
         console.error('Dashboard yüklenemedi:', err)
       } finally {
@@ -90,7 +80,7 @@ export default function AdminDashboard() {
           <div>
             <p className="text-dark-400 text-xs mb-1">Aktif Anketler</p>
             <p className="text-2xl font-display font-bold text-dark-50">
-              {loading ? '-' : stats.activeSurveys}
+              {loading ? <span className="inline-block w-8 h-7 bg-dark-700 rounded animate-pulse" /> : stats.activeSurveys}
             </p>
           </div>
         </div>
@@ -104,7 +94,7 @@ export default function AdminDashboard() {
           <div>
             <p className="text-dark-400 text-xs mb-1">Toplam Yanıt</p>
             <p className="text-2xl font-display font-bold text-dark-50">
-              {loading ? '-' : stats.totalResponses}
+              {loading ? <span className="inline-block w-8 h-7 bg-dark-700 rounded animate-pulse" /> : stats.totalResponses}
             </p>
           </div>
         </div>
@@ -117,11 +107,9 @@ export default function AdminDashboard() {
           </div>
           <div>
             <p className="text-dark-400 text-xs mb-1">Tamamlama Oranı</p>
-            <div className="flex justify-between items-baseline gap-2">
-              <p className="text-2xl font-display font-bold text-dark-50">
-                {loading ? '-' : `%${stats.completionRate}`}
-              </p>
-            </div>
+            <p className="text-2xl font-display font-bold text-dark-50">
+              {loading ? <span className="inline-block w-8 h-7 bg-dark-700 rounded animate-pulse" /> : `%${stats.completionRate}`}
+            </p>
           </div>
         </div>
       </div>
@@ -137,7 +125,17 @@ export default function AdminDashboard() {
         </div>
         <div className="p-0">
           {loading ? (
-            <div className="p-6 text-center text-dark-400">Yükleniyor...</div>
+            <div className="divide-y divide-dark-800">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="p-4 flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="w-48 h-4 bg-dark-700 rounded animate-pulse" />
+                    <div className="w-24 h-3 bg-dark-800 rounded animate-pulse" />
+                  </div>
+                  <div className="w-8 h-8 bg-dark-700 rounded-lg animate-pulse" />
+                </div>
+              ))}
+            </div>
           ) : recentSurveys.length === 0 ? (
             <div className="p-12 text-center flex flex-col items-center">
               <FileText className="w-12 h-12 text-dark-700 mb-3" />
@@ -154,14 +152,14 @@ export default function AdminDashboard() {
           ) : (
             <div className="divide-y divide-dark-800">
               {recentSurveys.map(survey => (
-                <div key={survey.id} className="p-4 hover:bg-dark-800x transition-colors flex items-center justify-between group">
+                <div key={survey.id} className="p-4 hover:bg-dark-800/30 transition-colors flex items-center justify-between group">
                   <div>
                     <h4 className="font-medium text-dark-100 mb-1">{survey.title}</h4>
                     <span className="text-xs text-dark-500">{formatDateTime(survey.created_at)}</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right hidden sm:block">
-                      <p className="text-sm font-semibold text-dark-200">{survey.real_response_count || 0}</p>
+                      <p className="text-sm font-semibold text-dark-200">{survey.response_count || 0}</p>
                       <p className="text-xs text-dark-500">Yanıt</p>
                     </div>
                     <Link to={`/admin/anketler/${survey.id}/sonuclar`} className="p-2 bg-dark-800 text-dark-300 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors">

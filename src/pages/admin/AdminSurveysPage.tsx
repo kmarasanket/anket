@@ -21,22 +21,13 @@ export default function AdminSurveysPage() {
     if (!tenant?.id) return
     setLoading(true)
     try {
-      const q = httpFrom('surveys').select('*')
+      // ✅ N+1 Sorgu Düzeltildi: Tek API çağrısıyla tüm anketler + response_count
+      const q = httpFrom('surveys').select('id,title,description,slug,status,created_at,response_count')
       q.eq('tenant_id', tenant.id)
       q.order('created_at', { ascending: false })
       const { data, error } = await q.execute()
       if (error) throw error
-      
-      const surveysWithCounts = await Promise.all((data || []).map(async (s: any) => {
-        const count = await httpFrom('responses')
-          .select('id')
-          .eq('survey_id', s.id)
-          .eq('is_complete', 'true')
-          .getCount()
-        return { ...s, real_response_count: count }
-      }))
-      
-      setSurveys(surveysWithCounts)
+      setSurveys(data || [])
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
     } finally {
@@ -144,7 +135,7 @@ export default function AdminSurveysPage() {
                   <div className="flex items-center gap-4 text-xs text-dark-500">
                     <span>Oluşturulma: {formatDate(survey.created_at)}</span>
                     <span className="w-1 h-1 rounded-full bg-dark-700" />
-                    <span>{survey.real_response_count || 0} Yanıt</span>
+                    <span>{survey.response_count || 0} Yanıt</span>
                   </div>
                 </div>
 
