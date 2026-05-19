@@ -82,7 +82,7 @@ export default function SASurveysPage() {
         p_title: `${selectedSurvey.title} (Kopya)`,
         p_description: selectedSurvey.description || null,
         p_slug: newSlug,
-        p_status: 'draft',
+        p_status: 'active',
         p_welcome_message: selectedSurvey.welcome_message || null,
         p_thank_you_message: selectedSurvey.thank_you_message || null
       })
@@ -131,7 +131,7 @@ export default function SASurveysPage() {
         p_title: newSurveyTitle.trim(),
         p_description: newSurveyDescription.trim() || null,
         p_slug: newSlug,
-        p_status: 'draft',
+        p_status: 'active',
         p_welcome_message: 'Aşağıda yer alan ifadeler ile ilgili geri bildirimleriniz, sizlere daha kaliteli hizmet sunmayı hedefleyen kurumumuz için büyük önem taşımaktadır.',
         p_thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.'
       })
