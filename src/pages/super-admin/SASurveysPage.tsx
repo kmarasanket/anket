@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { slugify, generateUUID, formatDate } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useAuthStore } from '../../stores/authStore'
-import { httpFrom } from '../../lib/supabaseHttp'
+import { httpFrom, httpRpc } from '../../lib/supabaseHttp'
 
 export default function SASurveysPage() {
   const [surveys, setSurveys] = useState<any[]>([])
@@ -76,32 +76,23 @@ export default function SASurveysPage() {
       const newSlug = `${slugify(selectedSurvey.title)}-${Math.random().toString(36).substr(2, 5)}`
       
       const newSurveyId = generateUUID()
-      const surveyPayload = {
-        id: newSurveyId,
-        tenant_id: targetTenantId,
-        title: `${selectedSurvey.title} (Kopya)`,
-        description: selectedSurvey.description,
-        slug: newSlug,
-        status: 'draft',
-        welcome_message: selectedSurvey.welcome_message,
-        thank_you_message: selectedSurvey.thank_you_message,
-        settings: selectedSurvey.settings,
-        created_by: profile.id,
-        created_at: new Date().toISOString()
-      }
-
-      const { data: newSurveyArr, error: surveyError } = await httpFrom('surveys')
-        .insert(surveyPayload, { returnData: true })
+      const { error: surveyError } = await httpRpc('save_survey_secure', {
+        p_id: newSurveyId,
+        p_tenant_id: targetTenantId,
+        p_title: `${selectedSurvey.title} (Kopya)`,
+        p_description: selectedSurvey.description || null,
+        p_slug: newSlug,
+        p_status: 'draft',
+        p_welcome_message: selectedSurvey.welcome_message || null,
+        p_thank_you_message: selectedSurvey.thank_you_message || null
+      })
 
       if (surveyError) throw surveyError
-      
-      const newSurvey = Array.isArray(newSurveyArr) ? newSurveyArr[0] : newSurveyArr
-      if (!newSurvey || !newSurvey.id) throw new Error('Anket oluşturuldu ancak ID alınamadı.')
 
       // 3. Soruları kopyala
       if (originalQuestions && originalQuestions.length > 0) {
         const questionsToInsert = originalQuestions.map((q: any) => ({
-          survey_id: newSurvey.id,
+          survey_id: newSurveyId,
           type: q.type,
           title: q.title,
           description: q.description,
@@ -133,25 +124,17 @@ export default function SASurveysPage() {
     try {
       const newSlug = `${slugify(newSurveyTitle)}-${Math.random().toString(36).substr(2, 5)}`
       const newSurveyId = generateUUID()
-      const surveyPayload = {
-        id: newSurveyId,
-        tenant_id: newSurveyTenantId,
-        title: newSurveyTitle.trim(),
-        description: newSurveyDescription.trim(),
-        slug: newSlug,
-        status: 'draft',
-        welcome_message: 'Aşağıda yer alan ifadeler ile ilgili geri bildirimleriniz, sizlere daha kaliteli hizmet sunmayı hedefleyen kurumumuz için büyük önem taşımaktadır.',
-        thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.',
-        allow_multiple_responses: true,
-        track_ip: true,
-        use_cookies: true,
-        require_login: false,
-        settings: {},
-        created_by: profile.id,
-        created_at: new Date().toISOString()
-      }
 
-      const { error: surveyError } = await httpFrom('surveys').insert(surveyPayload)
+      const { error: surveyError } = await httpRpc('save_survey_secure', {
+        p_id: newSurveyId,
+        p_tenant_id: newSurveyTenantId,
+        p_title: newSurveyTitle.trim(),
+        p_description: newSurveyDescription.trim() || null,
+        p_slug: newSlug,
+        p_status: 'draft',
+        p_welcome_message: 'Aşağıda yer alan ifadeler ile ilgili geri bildirimleriniz, sizlere daha kaliteli hizmet sunmayı hedefleyen kurumumuz için büyük önem taşımaktadır.',
+        p_thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.'
+      })
       if (surveyError) throw surveyError
 
       addNotification('Anket başarıyla oluşturuldu! Düzenleme sayfasına yönlendiriliyorsunuz...', 'success')
