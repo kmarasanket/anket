@@ -1191,11 +1191,32 @@ export default function AdminSurveyResults() {
                   .chart-report-chart-container {
                     flex: 1 1 50%;
                     min-width: 300px;
-                    height: 320px;
+                    height: 350px;
                     background: #f8fafc;
                     border-radius: 12px;
                     border: 1px solid #e2e8f0;
                     padding: 16px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                  }
+                  
+                  .chart-report-html-legend {
+                    display: flex;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    gap: 12px;
+                    margin-top: 8px;
+                    width: 100%;
+                  }
+                  
+                  .chart-report-legend-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 12px;
+                    color: #475569;
+                    font-weight: 500;
                   }
                   
                   .chart-report-table-container {
@@ -1253,11 +1274,22 @@ export default function AdminSurveyResults() {
                   }
                   .print-pdf-mode .chart-report-chart-container {
                     flex: 0 0 65% !important;
-                    height: 220px !important;
+                    height: 240px !important;
                     padding: 4px !important;
                     border-radius: 6px !important;
                     border: 1px solid #cbd5e1 !important;
                     background: #f9fafb !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    align-items: center !important;
+                  }
+                  .print-pdf-mode .chart-report-html-legend {
+                    gap: 6px !important;
+                    margin-top: 4px !important;
+                  }
+                  .print-pdf-mode .chart-report-legend-item {
+                    gap: 4px !important;
+                    font-size: 8px !important;
                   }
                   .print-pdf-mode .chart-report-table-container {
                     flex: 1 !important;
@@ -1312,41 +1344,52 @@ export default function AdminSurveyResults() {
 
                         {/* SOL: Pasta Grafik */}
                         <div className="chart-report-chart-container">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={item.chartData}
-                                cx="50%"
-                                cy="45%"
-                                labelLine={false}
-                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                  if (percent < 0.04) return null;
-                                  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                  const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
-                                  const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
-                                  return (
-                                    <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" className="chart-pie-percent-text" style={{ fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
-                                      {`%${(percent * 100).toFixed(1)}`}
-                                    </text>
-                                  );
-                                }}
-                                innerRadius={0}
-                                outerRadius={85}
-                                dataKey="value"
-                                stroke="#fff"
-                                strokeWidth={2}
-                              >
-                                {item.chartData.map((entry: any, index: number) => (
-                                  <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                ))}
-                              </Pie>
-                              <Tooltip 
-                                contentStyle={{ borderRadius: '6px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontSize: '11px' }}
-                                formatter={(value: number) => [`${value} Yanıt`, 'Sayı']} 
-                              />
-                              <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '8px' }} />
-                            </PieChart>
-                          </ResponsiveContainer>
+                          <div style={{ flex: 1, width: '100%', minHeight: '180px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={item.chartData}
+                                  cx="50%"
+                                  cy="45%"
+                                  labelLine={false}
+                                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                    if (percent < 0.04) return null;
+                                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                                    return (
+                                      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" className="chart-pie-percent-text" style={{ fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                                        {`%${(percent * 100).toFixed(1)}`}
+                                      </text>
+                                    );
+                                  }}
+                                  innerRadius={0}
+                                  outerRadius={85}
+                                  dataKey="value"
+                                  stroke="#fff"
+                                  strokeWidth={2}
+                                >
+                                  {item.chartData.map((entry: any, index: number) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip 
+                                  contentStyle={{ borderRadius: '6px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontSize: '11px' }}
+                                  formatter={(value: number) => [`${value} Yanıt`, 'Sayı']} 
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          
+                          {/* Native HTML Legend */}
+                          <div className="chart-report-html-legend">
+                            {item.chartData.map((entry: any, index: number) => (
+                              <div key={index} className="chart-report-legend-item">
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CHART_COLORS[index % CHART_COLORS.length], flexShrink: 0 }}></div>
+                                <span>{entry.name}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
 
                         {/* SAĞ: Veri Tablosu */}
@@ -1380,7 +1423,7 @@ export default function AdminSurveyResults() {
                                 )
                               })}
                               <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold' }}>
-                                <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'right', textTransform: 'uppercase' }}>TOPLAM YANITLANAN SORU SAYISI:</td>
+                                <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'right', textTransform: 'uppercase' }}>CEVAP SAYISI:</td>
                                 <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center' }}>{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
                                 <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center' }}>%100</td>
                               </tr>
