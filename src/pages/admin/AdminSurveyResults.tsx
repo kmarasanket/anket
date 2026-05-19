@@ -35,12 +35,12 @@ export default function AdminSurveyResults() {
 
   // Rapor Ayarları (Sabit A4 - Dikey)
 
-  // Filtre modu: 'range' = tarih aralığı, 'month' = ay/yıl seçimi
   const [filterMode, setFilterMode] = useState<'range' | 'month'>('month')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
     const loadResults = async () => {
@@ -161,6 +161,30 @@ export default function AdminSurveyResults() {
       return true
     })
   }, [responses, dateFrom, dateTo])
+
+  const itemsPerPage = 50
+  const totalPages = Math.ceil(filteredResponses.length / itemsPerPage)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [dateFrom, dateTo, selectedYear, selectedMonth])
+
+  const paginatedResponses = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return filteredResponses.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredResponses, currentPage])
+
+  const getPageNumbers = () => {
+    const pages = []
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+        pages.push(i)
+      } else if (i === 2 || i === totalPages - 1) {
+        pages.push('...')
+      }
+    }
+    return pages.filter((item, index, self) => item !== '...' || self[index - 1] !== '...')
+  }
 
   const findResponseAnswer = (response: any, question: any) => {
     if (!response.response_answers || response.response_answers.length === 0) return null
@@ -403,7 +427,7 @@ export default function AdminSurveyResults() {
     return { catQ, tgtQ, catOptions, tgtOptions, matrix, catTotals }
   }, [crossCategoryQ, crossTargetQ, questions, filteredResponses])
 
-  // Trend Analizi Verisi (Tüm Zamanları Kapsar)
+  // Trend Analizi Verisi (Tarih filtrelerine göre filtrelenir)
   const trendData = useMemo(() => {
     if (!trendTargetQ) return null
     const tgtQ = questions.find(q => q.id === trendTargetQ)
@@ -433,7 +457,7 @@ export default function AdminSurveyResults() {
 
     const monthlyGroups: Record<string, { totalScore: number, maxPossible: number, count: number }> = {}
 
-    responses.forEach(r => {
+    filteredResponses.forEach(r => {
       if (!r.completed_at) return
       const date = new Date(r.completed_at)
       const year = date.getFullYear()
@@ -462,8 +486,6 @@ export default function AdminSurveyResults() {
       const scorePercentage = maxPossible > 0 ? Math.round((totalScore / maxPossible) * 100) : 0
       
       const [y, m] = period.split('-')
-      // MONTH_NAMES is month 1-indexed probably or 0-indexed? 
-      // Turkish month names constant:
       const months = ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
       const monthName = months[Number(m)] || m
       const label = `${monthName} ${y}`
@@ -476,7 +498,7 @@ export default function AdminSurveyResults() {
     })
 
     return { tgtQ, chartData }
-  }, [trendTargetQ, questions, responses])
+  }, [trendTargetQ, questions, filteredResponses])
 
 
   const exportPDF = async () => {
@@ -822,52 +844,108 @@ export default function AdminSurveyResults() {
               {isFiltered ? 'Bu tarih aralığında yanıt bulunamadı.' : 'Henüz kimse bu anketi yanıtlamadı.'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-dark-900 border-b border-dark-800 text-dark-400">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">#</th>
-                    <th className="px-6 py-4 font-medium">Tarih / Saat</th>
-                    <th className="px-6 py-4 font-medium">Tarayıcı</th>
-                    <th className="px-6 py-4 font-medium text-right">Detaylar</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-dark-800">
-                  {filteredResponses.map((r, i) => {
-                    const browser = r.metadata?.b === 'ch' ? 'Chrome'
-                      : r.metadata?.b === 'ff' ? 'Firefox'
-                      : r.metadata?.b === 'sf' ? 'Safari'
-                      : r.metadata?.b === 'ed' ? 'Edge'
-                      : 'Diğer'
-                    const isMobile = r.metadata?.m === 1
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-dark-900 border-b border-dark-800 text-dark-400">
+                    <tr>
+                      <th className="px-6 py-4 font-medium">#</th>
+                      <th className="px-6 py-4 font-medium">Tarih / Saat</th>
+                      <th className="px-6 py-4 font-medium">Tarayıcı</th>
+                      <th className="px-6 py-4 font-medium text-right">Detaylar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-800">
+                    {paginatedResponses.map((r, i) => {
+                      const browser = r.metadata?.b === 'ch' ? 'Chrome'
+                        : r.metadata?.b === 'ff' ? 'Firefox'
+                        : r.metadata?.b === 'sf' ? 'Safari'
+                        : r.metadata?.b === 'ed' ? 'Edge'
+                        : 'Diğer'
+                      const isMobile = r.metadata?.m === 1
 
-                    return (
-                      <tr key={r.id} className="hover:bg-dark-800/50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-dark-200">
-                          #{filteredResponses.length - i}
-                        </td>
-                        <td className="px-6 py-4 text-dark-300">
-                          {r.completed_at ? formatDateTime(r.completed_at) : (
-                            <span className="text-dark-500 italic">Tarih kaydedilmemiş</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-dark-400 text-xs">
-                          {browser}{isMobile ? ' · Mobil' : ''}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => setSelectedResponse(r)}
-                            className="text-primary-400 hover:text-primary-300 font-medium"
-                          >
-                            İncele
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <tr key={r.id} className="hover:bg-dark-800/50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-dark-200">
+                            #{filteredResponses.length - ((currentPage - 1) * itemsPerPage + i)}
+                          </td>
+                          <td className="px-6 py-4 text-dark-300">
+                            {r.completed_at ? formatDateTime(r.completed_at) : (
+                              <span className="text-dark-500 italic">Tarih kaydedilmemiş</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-dark-400 text-xs">
+                            {browser}{isMobile ? ' · Mobil' : ''}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => setSelectedResponse(r)}
+                              className="text-primary-400 hover:text-primary-300 font-medium"
+                            >
+                              İncele
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 border-t border-dark-800 text-sm text-dark-400 bg-dark-900/10">
+                  <div>
+                    Toplam <span className="font-semibold text-dark-200">{filteredResponses.length}</span> kayıttan{' '}
+                    <span className="font-semibold text-dark-200">
+                      {(currentPage - 1) * itemsPerPage + 1}
+                    </span>
+                    -
+                    <span className="font-semibold text-dark-200">
+                      {Math.min(filteredResponses.length, currentPage * itemsPerPage)}
+                    </span>{' '}
+                    arası gösteriliyor.
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 rounded-lg bg-dark-900 border border-dark-800 text-dark-300 hover:bg-dark-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-semibold"
+                    >
+                      Geri
+                    </button>
+                    {getPageNumbers().map((pageNum, idx) => {
+                      if (pageNum === '...') {
+                        return (
+                          <span key={`dots-${idx}`} className="px-2 text-dark-500 font-bold select-none">
+                            ...
+                          </span>
+                        )
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(Number(pageNum))}
+                          className={`w-8 h-8 rounded-lg border transition-all text-xs font-bold ${
+                            currentPage === pageNum
+                              ? 'bg-primary-500 border-primary-500 text-white'
+                              : 'bg-dark-900 border-dark-800 text-dark-300 hover:bg-dark-800'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 rounded-lg bg-dark-900 border border-dark-800 text-dark-300 hover:bg-dark-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-semibold"
+                    >
+                      İleri
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
