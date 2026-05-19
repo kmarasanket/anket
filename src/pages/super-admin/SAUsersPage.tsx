@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, ToggleLeft, ToggleRight, Users } from 'lucide-react'
+import { Plus, Search, ToggleLeft, ToggleRight, Users, Edit2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useNotificationStore } from '../../stores/notificationStore'
 import type { Profile, Tenant } from '../../lib/database.types'
@@ -13,6 +13,9 @@ export default function SAUsersPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', password: '', password_confirm: '' })
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [editingUser, setEditingUser] = useState<Profile | null>(null)
+  const [editFormData, setEditFormData] = useState({ full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '' })
   const { addNotification } = useNotificationStore()
 
   const fetchData = async () => {
@@ -94,6 +97,44 @@ export default function SAUsersPage() {
       } else {
         addNotification("Kullanıcı eklenemedi: " + (err.message || 'Bilinmeyen hata'), 'error')
       }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEditClick = (user: Profile) => {
+    setEditingUser(user)
+    setEditFormData({
+      full_name: user.full_name,
+      role: user.role,
+      tenant_id: user.tenant_id || ''
+    })
+    setShowEditForm(true)
+  }
+
+  const handleEditSave = async () => {
+    if (!editingUser) return
+    if (!editFormData.full_name) {
+      addNotification("Ad Soyad boş bırakılamaz.", "warning")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const updates = {
+        full_name: editFormData.full_name,
+        role: editFormData.role,
+        tenant_id: editFormData.role === 'admin' ? editFormData.tenant_id : null
+      }
+      const { error } = await supabase.from('profiles').update(updates).eq('id', editingUser.id)
+      if (error) throw error
+      
+      addNotification('Kullanıcı bilgileri güncellendi.', 'success')
+      setShowEditForm(false)
+      setEditingUser(null)
+      fetchData()
+    } catch (err: any) {
+      addNotification('Kullanıcı güncellenirken hata oluştu: ' + (err.message || ''), 'error')
     } finally {
       setSaving(false)
     }
@@ -182,6 +223,46 @@ export default function SAUsersPage() {
         </div>
       )}
 
+      {/* Edit Form Modal */}
+      {showEditForm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="card p-6 w-full max-w-md slide-in-up">
+            <h2 className="text-lg font-bold text-dark-50 mb-5">Kullanıcıyı Düzenle</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="label">Ad Soyad *</label>
+                <input value={editFormData.full_name} onChange={e => setEditFormData(p => ({ ...p, full_name: e.target.value }))}
+                  placeholder="Ahmet Yılmaz" className="input" />
+              </div>
+              <div>
+                <label className="label">Rol</label>
+                <select value={editFormData.role} onChange={e => setEditFormData(p => ({ ...p, role: e.target.value as 'admin' | 'super_admin' }))}
+                  className="input">
+                  <option value="admin">Kurum Admin</option>
+                  <option value="super_admin">Süper Admin</option>
+                </select>
+              </div>
+              {editFormData.role === 'admin' && (
+                <div>
+                  <label className="label">Kurum</label>
+                  <select value={editFormData.tenant_id} onChange={e => setEditFormData(p => ({ ...p, tenant_id: e.target.value }))}
+                    className="input">
+                    <option value="">Kurum seçin...</option>
+                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowEditForm(false)} className="btn-md btn-secondary flex-1">İptal</button>
+              <button onClick={handleEditSave} disabled={saving} className="btn-md btn-primary flex-1">
+                {saving ? 'Kaydediliyor...' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Liste */}
       {loading ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="card p-4 h-16 animate-pulse bg-dark-800" />)}</div>
@@ -205,7 +286,10 @@ export default function SAUsersPage() {
                 <span className={user.is_active ? 'badge-success' : 'badge-danger'}>
                   {user.is_active ? 'Aktif' : 'Pasif'}
                 </span>
-                <button onClick={() => toggleActive(user)} className="btn-sm btn-ghost">
+                <button onClick={() => handleEditClick(user)} className="btn-sm btn-ghost" title="Düzenle">
+                  <Edit2 className="w-4 h-4 text-blue-400" />
+                </button>
+                <button onClick={() => toggleActive(user)} className="btn-sm btn-ghost" title={user.is_active ? 'Pasife Al' : 'Aktifleştir'}>
                   {user.is_active ? <ToggleRight className="w-4 h-4 text-secondary-400" /> : <ToggleLeft className="w-4 h-4 text-dark-500" />}
                 </button>
               </div>
