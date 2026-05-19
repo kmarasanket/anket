@@ -27,6 +27,7 @@ export default function AdminSurveyBuilder() {
   const navigate = useNavigate()
   const { tenant, user, profile } = useAuthStore()
   const { addNotification } = useNotificationStore()
+  const isReadOnly = profile?.role === 'admin'
   
   const [loading, setLoading] = useState(!!id)
   const [saving, setSaving] = useState(false)
@@ -45,6 +46,11 @@ export default function AdminSurveyBuilder() {
   const [questions, setQuestions] = useState<any[]>([])
 
   useEffect(() => {
+    if (isReadOnly && !id) {
+      addNotification('Yeni anket oluşturma yetkiniz bulunmamaktadır.', 'warning')
+      navigate('/admin/anketler', { replace: true })
+      return
+    }
     if (!id) return
     const loadSurvey = async () => {
       setLoading(true)
@@ -84,6 +90,7 @@ export default function AdminSurveyBuilder() {
   }, [id])
 
   const addQuestion = () => {
+    if (isReadOnly) return
     const newQ = {
       id: uuidv4(),
       survey_id: id || '',
@@ -99,6 +106,7 @@ export default function AdminSurveyBuilder() {
   }
 
   const addSection = () => {
+    if (isReadOnly) return
     const newQ = {
       id: uuidv4(),
       survey_id: id || '',
@@ -114,12 +122,14 @@ export default function AdminSurveyBuilder() {
   }
 
   const updateQuestion = (index: number, updates: any) => {
+    if (isReadOnly) return
     const updated = [...questions]
     updated[index] = { ...updated[index], ...updates }
     setQuestions(updated)
   }
 
   const removeQuestion = (index: number) => {
+    if (isReadOnly) return
     const updated = [...questions]
     updated.splice(index, 1)
     setQuestions(updated)
@@ -127,6 +137,7 @@ export default function AdminSurveyBuilder() {
 
   // Soruyu klonla: tıkladığın sorunun kopyasini hemen altına ekle
   const cloneQuestion = (index: number) => {
+    if (isReadOnly) return
     const original = questions[index]
     const clone = {
       ...original,
@@ -141,6 +152,10 @@ export default function AdminSurveyBuilder() {
   }
 
   const handleSave = async () => {
+    if (isReadOnly) {
+      addNotification('Anket kaydetme yetkiniz bulunmamaktadır (Salt Okunur).', 'warning')
+      return
+    }
     if (!tenant || !user) {
       addNotification('Kurum veya kullanıcı bilgisi eksik, lütfen sayfayı yenileyin.', 'error')
       return
@@ -234,14 +249,21 @@ export default function AdminSurveyBuilder() {
           <select 
             value={surveyData.status} 
             onChange={e => setSurveyData({...surveyData, status: e.target.value as any})}
-            className="input py-1.5 h-auto text-sm bg-dark-950"
+            disabled={isReadOnly}
+            className="input py-1.5 h-auto text-sm bg-dark-950 disabled:opacity-75 disabled:cursor-not-allowed"
           >
             <option value="active">Aktif (Yayında)</option>
             <option value="closed">Pasif (Kapalı)</option>
           </select>
-          <button onClick={handleSave} disabled={saving} className="btn-md btn-primary">
-            <Save className="w-4 h-4" /> {saving ? 'Kaydediliyor...' : 'Kaydet (Güncel)'}
-          </button>
+          {isReadOnly ? (
+            <span className="text-xs font-semibold px-3 py-1.5 bg-dark-800 border border-dark-700 text-dark-400 rounded-xl">
+              Salt Okunur Mod
+            </span>
+          ) : (
+            <button onClick={handleSave} disabled={saving} className="btn-md btn-primary">
+              <Save className="w-4 h-4" /> {saving ? 'Kaydediliyor...' : 'Kaydet (Güncel)'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -251,6 +273,7 @@ export default function AdminSurveyBuilder() {
           <input 
             value={surveyData.title}
             onChange={e => setSurveyData({...surveyData, title: e.target.value})}
+            readOnly={isReadOnly}
             className="block w-full min-w-0 bg-transparent text-2xl md:text-4xl font-display font-bold text-dark-50 focus:outline-none placeholder-dark-600 break-words overflow-hidden"
             placeholder="İsimsiz Anket"
             style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
@@ -258,6 +281,7 @@ export default function AdminSurveyBuilder() {
           <textarea 
             value={surveyData.description}
             onChange={e => setSurveyData({...surveyData, description: e.target.value})}
+            readOnly={isReadOnly}
             className="block w-full min-w-0 bg-transparent text-dark-300 focus:outline-none resize-none placeholder-dark-600 overflow-hidden"
             placeholder="Anket açıklaması (isteğe bağlı)..."
             rows={2}
@@ -269,6 +293,7 @@ export default function AdminSurveyBuilder() {
             <input 
               value={surveyData.slug}
               onChange={e => setSurveyData({...surveyData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
+              readOnly={isReadOnly}
               className="bg-dark-800 border border-dark-700 rounded px-2 py-0.5 text-primary-400 focus:outline-none focus:border-primary-500 flex-1 min-w-0"
               placeholder="uzanti"
             />
@@ -290,12 +315,14 @@ export default function AdminSurveyBuilder() {
                   <input 
                     value={q.title}
                     onChange={e => updateQuestion(qIndex, { title: e.target.value })}
+                    readOnly={isReadOnly}
                     className="input text-xl md:text-2xl font-display font-bold bg-dark-900 border-none border-b border-dark-700 rounded-none px-0 text-purple-400 focus:border-purple-500 w-full placeholder-purple-500/30"
                     placeholder="Yeni Bölüm"
                   />
                   <input 
                     value={q.description || ''}
                     onChange={e => updateQuestion(qIndex, { description: e.target.value })}
+                    readOnly={isReadOnly}
                     className="input text-sm text-dark-300 bg-transparent border-none px-0 w-full focus:ring-0 placeholder-dark-500"
                     placeholder="Bölüm alt başlığı (isteğe bağlı)"
                   />
@@ -304,6 +331,7 @@ export default function AdminSurveyBuilder() {
                 <input 
                   value={q.title}
                   onChange={e => updateQuestion(qIndex, { title: e.target.value })}
+                  readOnly={isReadOnly}
                   className="input text-lg font-medium bg-dark-950 border-dark-800 flex-1 placeholder-dark-600"
                   placeholder="Soru Başlığı"
                 />
@@ -311,7 +339,8 @@ export default function AdminSurveyBuilder() {
               <select 
                 value={q.type}
                 onChange={e => updateQuestion(qIndex, { type: e.target.value })}
-                className="input w-full md:w-48 bg-dark-950 border-dark-800 h-auto"
+                disabled={isReadOnly}
+                className="input w-full md:w-48 bg-dark-950 border-dark-800 h-auto disabled:opacity-75 disabled:cursor-not-allowed"
               >
                 {QUESTION_TYPES.map(qt => (
                   <option key={qt.type} value={qt.type}>{qt.label}</option>
@@ -332,9 +361,10 @@ export default function AdminSurveyBuilder() {
                         newOpts[oIndex] = e.target.value
                         updateQuestion(qIndex, { options: newOpts })
                       }}
+                      readOnly={isReadOnly}
                       className="bg-transparent text-dark-200 focus:outline-none focus:border-b focus:border-primary-500 text-sm w-full md:w-1/2"
                     />
-                    {profile?.role !== 'admin' && (
+                    {!isReadOnly && profile?.role !== 'admin' && (
                       <button onClick={() => {
                           const newOpts = [...q.options]; newOpts.splice(oIndex, 1);
                           updateQuestion(qIndex, { options: newOpts })
@@ -342,15 +372,17 @@ export default function AdminSurveyBuilder() {
                     )}
                   </div>
                 ))}
-                <div className="flex items-center gap-3 mt-2 opacity-60">
-                   <div className={`w-4 h-4 border-2 border-dark-500 ${q.type === 'radio' ? 'rounded-full' : 'rounded-sm'}`} />
-                   <button 
-                     onClick={() => updateQuestion(qIndex, { options: [...(q.options||[]), `Seçenek ${(q.options?.length||0)+1}`] })}
-                     className="text-sm font-medium text-dark-300 hover:border-b border-dark-300"
-                   >
-                     Seçenek Ekle
-                   </button>
-                </div>
+                {!isReadOnly && (
+                  <div className="flex items-center gap-3 mt-2 opacity-60">
+                     <div className={`w-4 h-4 border-2 border-dark-500 ${q.type === 'radio' ? 'rounded-full' : 'rounded-sm'}`} />
+                     <button 
+                       onClick={() => updateQuestion(qIndex, { options: [...(q.options||[]), `Seçenek ${(q.options?.length||0)+1}`] })}
+                       className="text-sm font-medium text-dark-300 hover:border-b border-dark-300"
+                     >
+                       Seçenek Ekle
+                     </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -370,22 +402,27 @@ export default function AdminSurveyBuilder() {
                   type="checkbox" 
                   checked={q.is_required}
                   onChange={e => updateQuestion(qIndex, { is_required: e.target.checked })}
-                  className="w-4 h-4 accent-primary-500"
+                  disabled={isReadOnly}
+                  className="w-4 h-4 accent-primary-500 disabled:opacity-75 disabled:cursor-not-allowed"
                 />
               </label>
-              <div className="w-px h-6 bg-dark-700" />
-              <button
-                onClick={() => cloneQuestion(qIndex)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-dark-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                title="Soruyu Klonla"
-              >
-                <Copy className="w-4 h-4" />
-                <span className="hidden sm:inline">Klonla</span>
-              </button>
-              {profile?.role !== 'admin' && (
-                <button onClick={() => removeQuestion(qIndex)} className="p-2 text-dark-400 hover:text-red-400 transition-colors" title="Soruyu Sil">
-                  <Trash2 className="w-5 h-5" />
-                </button>
+              {!isReadOnly && (
+                <>
+                  <div className="w-px h-6 bg-dark-700" />
+                  <button
+                    onClick={() => cloneQuestion(qIndex)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-dark-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                    title="Soruyu Klonla"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span className="hidden sm:inline">Klonla</span>
+                  </button>
+                  {profile?.role !== 'admin' && (
+                    <button onClick={() => removeQuestion(qIndex)} className="p-2 text-dark-400 hover:text-red-400 transition-colors" title="Soruyu Sil">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                </>
               )}
             </div>
             
@@ -393,14 +430,16 @@ export default function AdminSurveyBuilder() {
         ))}
       </div>
 
-      <div className="flex justify-center mt-8 gap-4">
-        <button onClick={addQuestion} className="btn-lg btn-secondary rounded-full px-6 shadow-card flex items-center gap-2 hover:border-primary-500 hover:text-primary-400">
-          <Plus className="w-5 h-5" /> Soru Ekle
-        </button>
-        <button onClick={addSection} className="btn-lg btn-secondary rounded-full px-6 shadow-card flex items-center gap-2 hover:border-purple-500 hover:text-purple-400">
-          <AlignLeft className="w-5 h-5" /> Bölüm Ekle
-        </button>
-      </div>
+      {!isReadOnly && (
+        <div className="flex justify-center mt-8 gap-4">
+          <button onClick={addQuestion} className="btn-lg btn-secondary rounded-full px-6 shadow-card flex items-center gap-2 hover:border-primary-500 hover:text-primary-400">
+            <Plus className="w-5 h-5" /> Soru Ekle
+          </button>
+          <button onClick={addSection} className="btn-lg btn-secondary rounded-full px-6 shadow-card flex items-center gap-2 hover:border-purple-500 hover:text-purple-400">
+            <AlignLeft className="w-5 h-5" /> Bölüm Ekle
+          </button>
+        </div>
+      )}
 
     </div>
   )

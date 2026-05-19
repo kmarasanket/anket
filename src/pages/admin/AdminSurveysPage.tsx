@@ -87,9 +87,11 @@ export default function AdminSurveysPage() {
           <h1 className="page-title">Anketler</h1>
           <p className="page-subtitle">Toplam {surveys.length} anketiniz bulunuyor</p>
         </div>
-        <Link to="/admin/anketler/yeni" className="btn-md btn-primary">
-          <Plus className="w-4 h-4" /> Yeni Anket Ekle
-        </Link>
+        {profile?.role !== 'admin' && (
+          <Link to="/admin/anketler/yeni" className="btn-md btn-primary">
+            <Plus className="w-4 h-4" /> Yeni Anket Ekle
+          </Link>
+        )}
       </div>
 
       <div className="relative">
@@ -113,7 +115,9 @@ export default function AdminSurveysPage() {
           </div>
           <h3 className="text-lg font-bold text-dark-100 mb-1">Anket Bulunamadı</h3>
           <p className="text-dark-400 mb-6">Arama kriterlerinize uygun anket yok veya hiç anket oluşturmadınız.</p>
-          <Link to="/admin/anketler/yeni" className="btn-md btn-secondary">İlk Anketini Oluştur</Link>
+          {profile?.role !== 'admin' && (
+            <Link to="/admin/anketler/yeni" className="btn-md btn-secondary">İlk Anketini Oluştur</Link>
+          )}
         </div>
       ) : (
         <div className="grid gap-4">
@@ -168,7 +172,7 @@ export default function AdminSurveysPage() {
                   </Link>
                   
                   <Link to={`/admin/anketler/${survey.id}/duzenle`} className="btn-sm btn-ghost hover:bg-blue-500/10 hover:text-blue-400 flex-1 md:flex-none justify-center">
-                    <Edit2 className="w-4 h-4" /> <span className="hidden md:inline">Düzenle</span>
+                    <Edit2 className="w-4 h-4" /> <span className="hidden md:inline">{profile?.role === 'admin' ? 'İncele' : 'Düzenle'}</span>
                   </Link>
 
                   {profile?.role !== 'admin' && (

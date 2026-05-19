@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { formatDate, formatDateTime } from '../../lib/utils'
 
 export default function AdminDashboard() {
-  const { tenant } = useAuthStore()
+  const { tenant, profile } = useAuthStore()
   const [stats, setStats] = useState({ activeSurveys: 0, totalResponses: 0, completionRate: 0 })
   const [recentSurveys, setRecentSurveys] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,9 +73,11 @@ export default function AdminDashboard() {
           <h1 className="page-title">Hoş Geldiniz</h1>
           <p className="page-subtitle">{tenant?.name} Anket Yönetim Paneli</p>
         </div>
-        <Link to="/admin/anketler/yeni" className="btn-lg btn-primary shadow-glow">
-          <Plus className="w-5 h-5" /> Yeni Anket Oluştur
-        </Link>
+        {profile?.role !== 'admin' && (
+          <Link to="/admin/anketler/yeni" className="btn-lg btn-primary shadow-glow">
+            <Plus className="w-5 h-5" /> Yeni Anket Oluştur
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -140,8 +142,14 @@ export default function AdminDashboard() {
             <div className="p-12 text-center flex flex-col items-center">
               <FileText className="w-12 h-12 text-dark-700 mb-3" />
               <p className="text-dark-300 font-medium mb-1">Henüz hiç anketiniz yok</p>
-              <p className="text-dark-500 text-sm mb-4">Hemen yeni bir anket oluşturarak başlayın.</p>
-              <Link to="/admin/anketler/yeni" className="btn-md btn-secondary">Oluştur</Link>
+              {profile?.role !== 'admin' ? (
+                <>
+                  <p className="text-dark-500 text-sm mb-4">Hemen yeni bir anket oluşturarak başlayın.</p>
+                  <Link to="/admin/anketler/yeni" className="btn-md btn-secondary">Oluştur</Link>
+                </>
+              ) : (
+                <p className="text-dark-500 text-sm">Görüntülenecek aktif anket bulunmuyor.</p>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-dark-800">
