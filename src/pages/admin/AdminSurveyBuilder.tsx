@@ -227,7 +227,13 @@ export default function AdminSurveyBuilder() {
       }
 
       addNotification('Anket başarıyla kaydedildi.', 'success')
-      setTimeout(() => navigate('/admin/anketler'), 300)
+      setTimeout(() => {
+        if (profile?.role === 'super_admin') {
+          navigate('/super-admin/anketler')
+        } else {
+          navigate('/admin/anketler')
+        }
+      }, 300)
 
     } catch (e: any) {
       console.error('Kayıt Hatası:', e)

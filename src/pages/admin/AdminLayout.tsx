@@ -15,6 +15,19 @@ export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
 
+  if (profile?.role === 'super_admin') {
+    const path = window.location.pathname
+    if (path === '/admin' || path === '/admin/') {
+      return <Navigate to="/super-admin" replace />
+    }
+    if (path === '/admin/anketler' || path === '/admin/anketler/') {
+      return <Navigate to="/super-admin/anketler" replace />
+    }
+    if (path === '/admin/ayarlar' || path === '/admin/ayarlar/') {
+      return <Navigate to="/super-admin/kurumlar" replace />
+    }
+  }
+
   const navItems = [
     { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard', end: true },
     { to: '/admin/anketler', icon: FileText,        label: 'Anketler'         },
