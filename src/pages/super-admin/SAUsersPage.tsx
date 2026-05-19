@@ -5,8 +5,10 @@ import { useNotificationStore } from '../../stores/notificationStore'
 import type { Profile, Tenant } from '../../lib/database.types'
 import { validatePassword } from '../../lib/utils'
 
+type ProfileWithEmail = Profile & { tenant_name?: string; email?: string }
+
 export default function SAUsersPage() {
-  const [users, setUsers] = useState<(Profile & { tenant_name?: string })[]>([])
+  const [users, setUsers] = useState<ProfileWithEmail[]>([])
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -14,14 +16,17 @@ export default function SAUsersPage() {
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', password: '', password_confirm: '' })
   const [showEditForm, setShowEditForm] = useState(false)
-  const [editingUser, setEditingUser] = useState<Profile | null>(null)
-  const [editFormData, setEditFormData] = useState({ full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '' })
+  const [editingUser, setEditingUser] = useState<ProfileWithEmail | null>(null)
+  const [editFormData, setEditFormData] = useState({ full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', email: '' })
   const { addNotification } = useNotificationStore()
 
   const fetchData = async () => {
     try {
+      const rpcRes = await supabase.rpc('get_users_with_email').order('created_at', { ascending: false })
+      const pRes = rpcRes.error ? await supabase.from('profiles').select('*').order('created_at', { ascending: false }) : rpcRes
+
       const [profilesRes, tenantsRes] = await Promise.all([
-        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        Promise.resolve(pRes),
         supabase.from('tenants').select('*').eq('is_active', true),
       ])
       
@@ -102,34 +107,48 @@ export default function SAUsersPage() {
     }
   }
 
-  const handleEditClick = (user: Profile) => {
+  const handleEditClick = (user: ProfileWithEmail) => {
     setEditingUser(user)
     setEditFormData({
       full_name: user.full_name,
       role: user.role,
-      tenant_id: user.tenant_id || ''
+      tenant_id: user.tenant_id || '',
+      email: user.email || ''
     })
     setShowEditForm(true)
   }
 
   const handleEditSave = async () => {
     if (!editingUser) return
-    if (!editFormData.full_name) {
-      addNotification("Ad Soyad boş bırakılamaz.", "warning")
+    if (!editFormData.full_name || !editFormData.email) {
+      addNotification("Ad Soyad ve E-posta boş bırakılamaz.", "warning")
       return
     }
 
     setSaving(true)
     try {
-      const updates = {
-        full_name: editFormData.full_name,
-        role: editFormData.role,
-        tenant_id: editFormData.role === 'admin' ? editFormData.tenant_id : null
+      const { error: rpcError } = await supabase.rpc('update_user_admin', {
+        p_user_id: editingUser.id,
+        p_full_name: editFormData.full_name,
+        p_role: editFormData.role,
+        p_tenant_id: editFormData.role === 'admin' ? editFormData.tenant_id : null,
+        p_email: editFormData.email.trim()
+      })
+
+      if (rpcError) {
+        // Fallback to normal update if RPC fails or doesn't exist
+        const updates = {
+          full_name: editFormData.full_name,
+          role: editFormData.role,
+          tenant_id: editFormData.role === 'admin' ? editFormData.tenant_id : null
+        }
+        const { error } = await supabase.from('profiles').update(updates).eq('id', editingUser.id)
+        if (error) throw error
+        addNotification('Kullanıcı güncellendi (E-posta güncellenemedi, SQL betiği çalıştırılmamış).', 'warning')
+      } else {
+        addNotification('Kullanıcı bilgileri ve e-posta güncellendi.', 'success')
       }
-      const { error } = await supabase.from('profiles').update(updates).eq('id', editingUser.id)
-      if (error) throw error
       
-      addNotification('Kullanıcı bilgileri güncellendi.', 'success')
       setShowEditForm(false)
       setEditingUser(null)
       fetchData()
@@ -235,6 +254,11 @@ export default function SAUsersPage() {
                   placeholder="Ahmet Yılmaz" className="input" />
               </div>
               <div>
+                <label className="label">E-posta *</label>
+                <input value={editFormData.email} onChange={e => setEditFormData(p => ({ ...p, email: e.target.value }))}
+                  type="email" placeholder="ahmet@kurum.gov.tr" className="input" />
+              </div>
+              <div>
                 <label className="label">Rol</label>
                 <select value={editFormData.role} onChange={e => setEditFormData(p => ({ ...p, role: e.target.value as 'admin' | 'super_admin' }))}
                   className="input">
@@ -277,7 +301,15 @@ export default function SAUsersPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-dark-100 truncate">{user.full_name}</p>
-                <p className="text-xs text-dark-500">{user.tenant_name || 'Ana Sistem'}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xs text-dark-500">{user.tenant_name || 'Ana Sistem'}</p>
+                  {user.email && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-dark-700" />
+                      <p className="text-xs text-dark-400 truncate">{user.email}</p>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className={user.role === 'super_admin' ? 'badge-primary' : 'badge-neutral'}>
