@@ -10,6 +10,7 @@ import AdminDashboard from './AdminDashboard'
 import AdminSurveysPage from './AdminSurveysPage'
 import AdminSurveyBuilder from './AdminSurveyBuilder'
 import AdminSurveyResults from './AdminSurveyResults'
+import AdminSettings from './AdminSettings'
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
@@ -111,8 +112,8 @@ export default function AdminLayout() {
             <Route path="anketler/yeni" element={<AdminSurveyBuilder />} />
             <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
             <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
-            {/* Settings route placeholder */}
-            <Route path="ayarlar" element={<div>Ayarlar Sayfası Yakında</div>} />
+            {/* Settings */}
+            <Route path="ayarlar" element={<AdminSettings />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>
