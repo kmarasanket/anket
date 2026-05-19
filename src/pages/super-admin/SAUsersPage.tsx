@@ -22,7 +22,7 @@ export default function SAUsersPage() {
 
   const fetchData = async () => {
     try {
-      const rpcRes = await supabase.rpc('get_users_with_email').order('created_at', { ascending: false })
+      const rpcRes = await supabase.rpc('get_users_with_email')
       const pRes = rpcRes.error ? await supabase.from('profiles').select('*').order('created_at', { ascending: false }) : rpcRes
 
       const [profilesRes, tenantsRes] = await Promise.all([
@@ -31,7 +31,12 @@ export default function SAUsersPage() {
       ])
       
       const tenantMap = new Map((tenantsRes.data || []).map(t => [t.id, t.name]))
-      setUsers((profilesRes.data || []).map(p => ({ ...p, tenant_name: p.tenant_id ? tenantMap.get(p.tenant_id) : 'Ana Sistem' })))
+      let fetchedUsers = (profilesRes.data || []).map(p => ({ ...p, tenant_name: p.tenant_id ? tenantMap.get(p.tenant_id) : 'Ana Sistem' }))
+      
+      // PostgREST bazen RPC sonuçlarında order() desteklemez (400 Bad Request döner), bu yüzden JS'de sıralıyoruz
+      fetchedUsers.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      
+      setUsers(fetchedUsers)
       setTenants(tenantsRes.data || [])
     } catch (err: any) {
       addNotification('Veriler yüklenirken bir hata oluştu.', 'error')
