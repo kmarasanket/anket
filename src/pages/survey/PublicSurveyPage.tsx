@@ -362,7 +362,7 @@ export default function PublicSurveyPage() {
                     />
                   )}
 
-                  {q.type === 'radio' && (
+                  {(q.type === 'radio' || q.type === 'checkbox') && (
                     <div className="space-y-3">
                       {q.options?.map((opt: string, i: number) => (
                         <label key={i} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:bg-dark-800 cursor-pointer transition-colors has-[:checked]:bg-primary-500/10 has-[:checked]:border-primary-500/30">
@@ -373,23 +373,6 @@ export default function PublicSurveyPage() {
                             checked={answers[q.id] === opt}
                             onChange={e => handleAnswerChange(q.id, e.target.value)}
                             className="w-4 h-4 text-primary-500 bg-dark-950 border-dark-700 focus:ring-primary-500 focus:ring-offset-dark-900"
-                          />
-                          <span className="text-dark-200">{opt}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-
-                  {q.type === 'checkbox' && (
-                    <div className="space-y-3">
-                      {q.options?.map((opt: string, i: number) => (
-                        <label key={i} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:bg-dark-800 cursor-pointer transition-colors has-[:checked]:bg-primary-500/10 has-[:checked]:border-primary-500/30">
-                          <input
-                            type="checkbox"
-                            value={opt}
-                            checked={(answers[q.id] || []).includes(opt)}
-                            onChange={e => handleCheckboxChange(q.id, opt, e.target.checked)}
-                            className="w-4 h-4 text-primary-500 rounded bg-dark-950 border-dark-700 focus:ring-primary-500 focus:ring-offset-dark-900"
                           />
                           <span className="text-dark-200">{opt}</span>
                         </label>

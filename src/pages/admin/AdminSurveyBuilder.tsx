@@ -17,7 +17,6 @@ const QUESTION_TYPES: { type: QuestionType; label: string; icon: any }[] = [
   { type: 'text', label: 'Kısa Metin', icon: Baseline },
   { type: 'textarea', label: 'Uzun Metin (Açıklama)', icon: AlignLeft },
   { type: 'radio', label: 'Tek Seçimli', icon: CircleDot },
-  { type: 'checkbox', label: 'Çok Seçimli', icon: CheckSquare },
   { type: 'rating', label: 'Yıldız/Derece', icon: Star },
   { type: 'date', label: 'Tarih', icon: Calendar },
 ]
