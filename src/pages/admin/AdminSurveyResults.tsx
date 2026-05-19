@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText, PieChart as PieChartIcon } from 'lucide-react'
+import { ArrowLeft, Users, Download, Activity, LayoutList, X, Calendar, Filter, FileSpreadsheet, FileText, Trash2, PieChart as PieChartIcon } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import html2pdf from 'html2pdf.js'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { formatDateTime } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 
 const getOptionWeight = (opt: string, index: number, totalOptions: number) => {
   const lower = opt.toLowerCase().trim()
@@ -22,7 +23,7 @@ const getOptionWeight = (opt: string, index: number, totalOptions: number) => {
 
 export default function AdminSurveyResults() {
   const { id } = useParams()
-  const { tenant } = useAuthStore()
+  const { tenant, profile } = useAuthStore()
   const [survey, setSurvey] = useState<any>(null)
   const [questions, setQuestions] = useState<any[]>([])
   const [responses, setResponses] = useState<any[]>([])
@@ -41,6 +42,27 @@ export default function AdminSurveyResults() {
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  
+  const { addNotification } = useNotificationStore()
+
+  const handleDeleteResponse = async (responseId: string) => {
+    if (confirm('Bu yanıtı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) {
+      try {
+        const { error } = await httpFrom('responses').delete().eq('id', responseId).execute()
+        if (error) throw error
+        
+        setResponses(prev => prev.filter(res => res.id !== responseId))
+        
+        if (selectedResponse?.id === responseId) {
+          setSelectedResponse(null)
+        }
+        
+        addNotification('Yanıt başarıyla silindi.', 'success')
+      } catch (err: any) {
+        addNotification('Yanıt silinirken bir hata oluştu: ' + (err.message || ''), 'error')
+      }
+    }
+  }
 
   useEffect(() => {
     const loadResults = async () => {
@@ -878,12 +900,23 @@ export default function AdminSurveyResults() {
                             {browser}{isMobile ? ' · Mobil' : ''}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => setSelectedResponse(r)}
-                              className="text-primary-400 hover:text-primary-300 font-medium"
-                            >
-                              İncele
-                            </button>
+                            <div className="flex items-center justify-end gap-3">
+                              <button
+                                onClick={() => setSelectedResponse(r)}
+                                className="text-primary-400 hover:text-primary-300 font-medium text-xs"
+                              >
+                                İncele
+                              </button>
+                              {profile?.role === 'super_admin' && (
+                                <button
+                                  onClick={() => handleDeleteResponse(r.id)}
+                                  className="text-red-400 hover:text-red-300 font-medium flex items-center gap-1 text-xs"
+                                  title="Yanıtı Sil"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" /> Sil
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )

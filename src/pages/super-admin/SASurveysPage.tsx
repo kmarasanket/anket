@@ -256,6 +256,14 @@ export default function SASurveysPage() {
                           <ExternalLink className="w-4 h-4" />
                         </a>
 
+                        <Link 
+                          to={`/admin/anketler/${survey.id}/sonuclar`}
+                          className="btn-sm btn-ghost hover:bg-purple-500/10 hover:text-purple-400"
+                          title="Sonuçlar"
+                        >
+                          <BarChart3 className="w-4 h-4" /> <span className="hidden lg:inline">Sonuçlar</span>
+                        </Link>
+
                         <div className="w-px h-4 bg-dark-800 mx-1" />
 
                         <Link 
