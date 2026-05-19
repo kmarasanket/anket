@@ -962,17 +962,22 @@ export default function AdminSurveyResults() {
               <button onClick={exportReportExcel} className="btn-md btn-secondary gap-2 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30">
                 <FileSpreadsheet className="w-4 h-4" /> Excel İndir
               </button>
-              <button onClick={() => {
+              <button onClick={async () => {
                 const element = document.getElementById('report-table-print-area')
                 if (!element) return
-                html2pdf().set({
-                  margin: [5, 5, 5, 5],
-                  filename: `${survey?.title || 'Rapor'}.pdf`,
-                  image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                  pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
-                }).from(element).save()
+                element.classList.add('print-pdf-mode')
+                try {
+                  await html2pdf().set({
+                    margin: [5, 5, 5, 5],
+                    filename: `${survey?.title || 'Rapor'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+                  }).from(element).save()
+                } finally {
+                  element.classList.remove('print-pdf-mode')
+                }
               }} className="btn-md btn-primary gap-2">
                 <Download className="w-4 h-4" /> PDF Olarak Kaydet
               </button>
@@ -988,11 +993,8 @@ export default function AdminSurveyResults() {
             <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
               <div 
                 id="report-table-print-area" 
-                className="bg-white text-black shadow-2xl relative"
+                className="bg-white text-black shadow-2xl relative w-full p-6 sm:p-8 rounded-2xl"
                 style={{ 
-                  width: '200mm',
-                  maxWidth: 'none', 
-                  padding: '5mm', 
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, sans-serif'
                 }}
@@ -1000,15 +1002,15 @@ export default function AdminSurveyResults() {
                 <style>{`
                   #report-table {
                     font-family: Arial, sans-serif;
-                    font-size: 10px;
+                    font-size: 13px;
                     width: 100%;
                     border-collapse: collapse;
                     color: black;
                     table-layout: fixed;
                   }
                   #report-table th, #report-table td {
-                    border: 1px solid #444;
-                    padding: 5px 4px;
+                    border: 1px solid #cbd5e1;
+                    padding: 10px 8px;
                     text-align: center;
                     vertical-align: middle;
                     word-wrap: break-word;
@@ -1016,19 +1018,46 @@ export default function AdminSurveyResults() {
                   }
                   #report-table .text-left { text-align: left; }
                   #report-table .font-bold { font-weight: bold; }
-                  #report-table th { background-color: #e5e7eb; font-weight: bold; font-size: 10px; }
-                  #report-table .bg-gray-100 { background-color: #f3f4f6 !important; }
-                  #report-table .q-col { width: 48%; }
-                  #report-table .opt-col { width: ${(52 / (reportData.options.length || 1)).toFixed(1)}%; }
+                  #report-table th { background-color: #f1f5f9; font-weight: bold; font-size: 13px; }
+                  #report-table .bg-gray-100 { background-color: #f8fafc !important; }
+                  #report-table .q-col { width: 45%; }
+                  #report-table .opt-col { width: ${(55 / (reportData.options.length || 1)).toFixed(1)}%; }
+                  
+                  .report-title { font-size: 18px; }
+                  .report-info { font-size: 13px; }
+
+                  /* PDF Kaydetme (A4 Dikey) Modu */
+                  .print-pdf-mode {
+                    width: 200mm !important;
+                    padding: 5mm !important;
+                    border-radius: 0px !important;
+                  }
+                  .print-pdf-mode #report-table {
+                    font-size: 9px !important;
+                  }
+                  .print-pdf-mode #report-table th, .print-pdf-mode #report-table td {
+                    border: 1px solid #444 !important;
+                    padding: 5px 4px !important;
+                  }
+                  .print-pdf-mode #report-table th {
+                    font-size: 9px !important;
+                    background-color: #e5e7eb !important;
+                  }
+                  .print-pdf-mode #report-table .bg-gray-100 {
+                    background-color: #f3f4f6 !important;
+                  }
+                  .print-pdf-mode #report-table .q-col { width: 48% !important; }
+                  .print-pdf-mode #report-table .opt-col { width: ${(52 / (reportData.options.length || 1)).toFixed(1)}% !important; }
+                  .print-pdf-mode .report-title { font-size: 13px !important; }
+                  .print-pdf-mode .report-info { font-size: 8px !important; }
                 `}</style>
                 
                 {/* Başlık */}
-                <div style={{ fontSize: '15px', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '2px solid black', paddingBottom: '3mm', marginBottom: '4mm' }}>
+                <div className="report-title font-bold uppercase border-b-2 border-black pb-3 mb-4">
                   SEÇENEK BAZINDA VERİLEN CEVAP SAYISI VE ORANI
                 </div>
-
                 {/* Üst Bilgi */}
-                <div style={{ fontSize: '10px', marginBottom: '4mm', lineHeight: '1.6' }}>
+                <div className="report-info mb-4" style={{ lineHeight: '1.6' }}>
                   <div>Anket Adı: <strong>{survey?.title}</strong></div>
                   <div>Yıl/Ay: <strong>{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</strong></div>
                   <div>Hastane Adı: <strong>{tenant?.name || '-'}</strong></div>
@@ -1108,17 +1137,22 @@ export default function AdminSurveyResults() {
               {/* Butonlar kaldırıldı - Sabit A4 Dikey */}
             </div>
             <div className="flex gap-3">
-              <button onClick={() => {
+              <button onClick={async () => {
                 const element = document.getElementById('chart-report-print-area')
                 if (!element) return
-                html2pdf().set({
-                  margin: [5, 5, 5, 5],
-                  filename: `${survey?.title || 'Grafik Rapor'}.pdf`,
-                  image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                  pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-                }).from(element).save()
+                element.classList.add('print-pdf-mode')
+                try {
+                  await html2pdf().set({
+                    margin: [5, 5, 5, 5],
+                    filename: `${survey?.title || 'Grafik Rapor'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                  }).from(element).save()
+                } finally {
+                  element.classList.remove('print-pdf-mode')
+                }
               }} className="btn-md btn-primary gap-2">
                 <Download className="w-4 h-4" /> PDF Olarak Kaydet
               </button>
@@ -1133,21 +1167,130 @@ export default function AdminSurveyResults() {
             <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
               <div 
                 id="chart-report-print-area" 
-                className="bg-white text-black shadow-2xl"
+                className="bg-white text-black shadow-2xl w-full p-6 sm:p-8 rounded-2xl"
                 style={{ 
-                  width: '200mm',
-                  maxWidth: 'none', 
-                  padding: '5mm', 
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, sans-serif'
                 }}
               >
+                <style>{`
+                  /* Varsayılan Ekran Modu */
+                  .chart-report-title { font-size: 20px; }
+                  .chart-report-info { font-size: 13px; }
+                  .chart-report-item { margin-bottom: 30px; }
+                  .chart-report-q-title { font-size: 15px; }
+                  
+                  .chart-report-flex {
+                    display: flex;
+                    flex-direction: row;
+                    align-items: flex-start;
+                    gap: 20px;
+                    flex-wrap: wrap;
+                  }
+                  
+                  .chart-report-chart-container {
+                    flex: 1 1 50%;
+                    min-width: 300px;
+                    height: 320px;
+                    background: #f8fafc;
+                    border-radius: 12px;
+                    border: 1px solid #e2e8f0;
+                    padding: 16px;
+                  }
+                  
+                  .chart-report-table-container {
+                    flex: 1 1 45%;
+                    min-width: 300px;
+                  }
+                  
+                  .chart-report-table-header {
+                    font-size: 13px;
+                    font-weight: bold;
+                    color: #64748b;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    margin-bottom: 10px;
+                    text-align: center;
+                  }
+                  
+                  .chart-report-table {
+                    width: 100%;
+                    font-size: 13px;
+                    border-collapse: collapse;
+                    border: 1px solid #cbd5e1;
+                  }
+                  .chart-report-table th, .chart-report-table td {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px;
+                  }
+                  .chart-report-table th {
+                    background-color: #f1f5f9;
+                    font-weight: bold;
+                    color: #1e293b;
+                  }
+                  
+                  .chart-pie-percent-text {
+                    font-size: 11px;
+                  }
+
+                  /* PDF Kaydetme (A4 Dikey) Modu */
+                  .print-pdf-mode {
+                    width: 200mm !important;
+                    padding: 5mm !important;
+                    border-radius: 0px !important;
+                  }
+                  .print-pdf-mode .chart-report-title { font-size: 13px !important; margin-bottom: 2mm !important; }
+                  .print-pdf-mode .chart-report-info { font-size: 8px !important; }
+                  .print-pdf-mode .chart-report-item { margin-bottom: 15px !important; }
+                  .print-pdf-mode .chart-report-q-title { font-size: 9px !important; margin-bottom: 2mm !important; }
+                  
+                  .print-pdf-mode .chart-report-flex {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    flex-wrap: nowrap !important;
+                    align-items: flex-start !important;
+                    gap: 5mm !important;
+                  }
+                  .print-pdf-mode .chart-report-chart-container {
+                    flex: 0 0 65% !important;
+                    height: 220px !important;
+                    padding: 4px !important;
+                    border-radius: 6px !important;
+                    border: 1px solid #cbd5e1 !important;
+                    background: #f9fafb !important;
+                  }
+                  .print-pdf-mode .chart-report-table-container {
+                    flex: 1 !important;
+                    min-width: 0 !important;
+                  }
+                  .print-pdf-mode .chart-report-table-header {
+                    font-size: 7px !important;
+                    margin-bottom: 2mm !important;
+                  }
+                  .print-pdf-mode .chart-report-table {
+                    font-size: 8px !important;
+                    border: 1px solid #cbd5e1 !important;
+                  }
+                  .print-pdf-mode .chart-report-table th,
+                  .print-pdf-mode .chart-report-table td {
+                    padding: 3px 4px !important;
+                    border: 1px solid #cbd5e1 !important;
+                  }
+                  .print-pdf-mode .chart-report-table th {
+                    font-size: 7px !important;
+                    background-color: #e0f2fe !important;
+                  }
+                  .print-pdf-mode .chart-pie-percent-text {
+                    font-size: 10px !important;
+                  }
+                `}</style>
+                
                 {/* Başlık */}
                 <div style={{ borderBottom: '2px solid black', paddingBottom: '4mm', marginBottom: '4mm' }}>
-                  <h1 style={{ fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', margin: 0, marginBottom: '3mm' }}>
+                  <h1 className="chart-report-title font-bold uppercase m-0 mb-3">
                     SORU BAZINDA SONUÇ ANALİZİ (GRAFİK)
                   </h1>
-                  <div style={{ fontSize: '8px', lineHeight: '1.6' }}>
+                  <div className="chart-report-info" style={{ lineHeight: '1.6' }}>
                     <div>Anket Adı: <strong>{survey?.title}</strong></div>
                     <div>Yıl/Ay: <strong>{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</strong></div>
                     <div>Hastane Adı: <strong>{tenant?.name || '-'}</strong></div>
@@ -1158,17 +1301,17 @@ export default function AdminSurveyResults() {
                 {/* Her soru için: grafik SOL | tablo SAĞ */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8mm' }}>
                   {chartReportData.map((item, idx) => (
-                    <div key={item.id} style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                    <div key={item.id} className="chart-report-item" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                       {/* Soru başlığı */}
-                      <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '3mm', borderLeft: '3px solid #3b82f6', paddingLeft: '3mm' }}>
+                      <div className="chart-report-q-title font-bold mb-3 border-l-[3px] border-[#3b82f6] pl-3">
                         {idx + 1}. {stripQuestionPrefix(item.title)}
                       </div>
 
                       {/* Yan yana: grafik + tablo */}
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5mm', flexWrap: 'nowrap' }}>
+                      <div className="chart-report-flex">
 
                         {/* SOL: Pasta Grafik */}
-                        <div style={{ flex: '0 0 65%', height: '220px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', padding: '4px' }}>
+                        <div className="chart-report-chart-container">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
@@ -1182,7 +1325,7 @@ export default function AdminSurveyResults() {
                                   const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
                                   const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
                                   return (
-                                    <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" style={{ fontSize: '10px', fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                                    <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" className="chart-pie-percent-text" style={{ fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
                                       {`%${(percent * 100).toFixed(1)}`}
                                     </text>
                                   );
@@ -1207,16 +1350,16 @@ export default function AdminSurveyResults() {
                         </div>
 
                         {/* SAĞ: Veri Tablosu */}
-                        <div style={{ flex: '1', minWidth: 0 }}>
-                          <div style={{ fontSize: '7px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2mm', textAlign: 'center' }}>
+                        <div className="chart-report-table-container">
+                          <div className="chart-report-table-header">
                             CEVAP DAĞILIMI VE SAYILARI
                           </div>
-                          <table style={{ width: '100%', fontSize: '8px', borderCollapse: 'collapse', border: '1px solid #d1d5db' }}>
+                          <table className="chart-report-table">
                             <thead>
                               <tr style={{ backgroundColor: '#e0f2fe' }}>
-                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'left', fontSize: '7px', color: '#0369a1' }}>Cevap Seçeneği</th>
-                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px', color: '#0369a1' }}>Sayı</th>
-                                <th style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', width: '40px', fontSize: '7px', color: '#0369a1' }}>Oran</th>
+                                <th style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'left', color: '#0369a1' }}>Cevap Seçeneği</th>
+                                <th style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center', width: '60px', color: '#0369a1' }}>Sayı</th>
+                                <th style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center', width: '60px', color: '#0369a1' }}>Oran</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1225,21 +1368,21 @@ export default function AdminSurveyResults() {
                                 const percentage = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0'
                                 return (
                                   <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'left' }}>
+                                    <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'left' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0 }}></div>
                                         <span style={{ fontWeight: '500' }}>{d.name}</span>
                                       </div>
                                     </td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', fontWeight: 'bold' }}>{d.value}</td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center', fontWeight: 'bold', color: '#2563eb' }}>%{percentage}</td>
+                                    <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>{d.value}</td>
+                                    <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', color: '#2563eb' }}>%{percentage}</td>
                                   </tr>
                                 )
                               })}
                               <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold' }}>
-                                <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'right', fontSize: '7px', textTransform: 'uppercase' }}>TOPLAM YANITLANAN SORU SAYISI:</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center' }}>{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '3px 4px', textAlign: 'center' }}>%100</td>
+                                <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'right', textTransform: 'uppercase' }}>TOPLAM YANITLANAN SORU SAYISI:</td>
+                                <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center' }}>{item.data.reduce((acc, curr) => acc + curr.value, 0)}</td>
+                                <td style={{ border: '1px solid #cbd5e1', padding: '6px 8px', textAlign: 'center' }}>%100</td>
                               </tr>
                             </tbody>
                           </table>
