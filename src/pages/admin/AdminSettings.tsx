@@ -89,6 +89,18 @@ export default function AdminSettings() {
     }
   }
 
+  const formatNumberWithDots = (val: number | null): string => {
+    if (val === null || isNaN(val)) return ''
+    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  }
+
+  const handleInputChange = (field: keyof TenantSettings, rawValue: string) => {
+    // Sadece sayıları koru
+    const digitsOnly = rawValue.replace(/\D/g, '')
+    const parsed = digitsOnly === '' ? null : Number(digitsOnly)
+    setForm(p => ({ ...p, [field]: parsed }))
+  }
+
   const numInput = (label: string, icon: React.ReactNode, field: keyof TenantSettings, description: string) => (
     <div className="space-y-1.5">
       <label className="label flex items-center gap-2">
@@ -97,10 +109,9 @@ export default function AdminSettings() {
       </label>
       <p className="text-xs text-dark-500 -mt-1 mb-1">{description}</p>
       <input
-        type="number"
-        min={0}
-        value={form[field] ?? ''}
-        onChange={e => setForm(p => ({ ...p, [field]: e.target.value === '' ? null : Number(e.target.value) }))}
+        type="text"
+        value={formatNumberWithDots(form[field])}
+        onChange={e => handleInputChange(field, e.target.value)}
         className="input"
         placeholder="0"
       />
@@ -200,10 +211,9 @@ export default function AdminSettings() {
               </label>
               <p className="text-xs text-dark-500 -mt-1 mb-1">Ayaktan hasta sayısı</p>
               <input
-                type="number"
-                min={0}
-                value={form.prev_year_outpatient ?? ''}
-                onChange={e => setForm(p => ({ ...p, prev_year_outpatient: e.target.value === '' ? null : Number(e.target.value) }))}
+                type="text"
+                value={formatNumberWithDots(form.prev_year_outpatient)}
+                onChange={e => handleInputChange('prev_year_outpatient', e.target.value)}
                 className="input"
                 placeholder="0"
               />
@@ -215,10 +225,9 @@ export default function AdminSettings() {
               </label>
               <p className="text-xs text-dark-500 -mt-1 mb-1">İnpatient hasta sayısı</p>
               <input
-                type="number"
-                min={0}
-                value={form.prev_year_inpatient ?? ''}
-                onChange={e => setForm(p => ({ ...p, prev_year_inpatient: e.target.value === '' ? null : Number(e.target.value) }))}
+                type="text"
+                value={formatNumberWithDots(form.prev_year_inpatient)}
+                onChange={e => handleInputChange('prev_year_inpatient', e.target.value)}
                 className="input"
                 placeholder="0"
               />
@@ -230,10 +239,9 @@ export default function AdminSettings() {
               </label>
               <p className="text-xs text-dark-500 -mt-1 mb-1">Acil servis hasta sayısı</p>
               <input
-                type="number"
-                min={0}
-                value={form.prev_year_emergency ?? ''}
-                onChange={e => setForm(p => ({ ...p, prev_year_emergency: e.target.value === '' ? null : Number(e.target.value) }))}
+                type="text"
+                value={formatNumberWithDots(form.prev_year_emergency)}
+                onChange={e => handleInputChange('prev_year_emergency', e.target.value)}
                 className="input"
                 placeholder="0"
               />
