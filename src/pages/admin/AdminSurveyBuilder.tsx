@@ -181,9 +181,15 @@ export default function AdminSurveyBuilder() {
       // Öncelik state'deki slug'da, yoksa yeni üret
       const finalSlug = (surveyData.slug || generateShortSlug(surveyData.title)).toLowerCase().trim()
 
+      const targetTenantId = surveyData.tenant_id || tenant?.id
+      if (!targetTenantId) {
+        addNotification('Kurum bilgisi doğrulanamadı. Lütfen sayfayı yenileyip tekrar deneyin.', 'error')
+        return
+      }
+
       const { error: rpcError } = await httpRpc('save_survey_secure', {
         p_id: surveyId,
-        p_tenant_id: surveyData.tenant_id || tenant?.id || '',
+        p_tenant_id: targetTenantId,
         p_title: surveyData.title.trim(),
         p_description: surveyData.description || null,
         p_slug: finalSlug,
