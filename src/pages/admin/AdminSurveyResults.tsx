@@ -636,7 +636,7 @@ export default function AdminSurveyResults() {
       {/* Üst Bar */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4 min-w-0">
-          <Link to="/admin/anketler" className="btn-sm btn-ghost p-2 shrink-0">
+          <Link to={profile?.role === 'super_admin' ? '/super-admin/anketler' : '/admin/anketler'} className="btn-sm btn-ghost p-2 shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="page-header mb-0 min-w-0">

@@ -14,6 +14,8 @@ import SATenantsPage from './SATenantsPage'
 import SAUsersPage from './SAUsersPage'
 import SAReportsPage from './SAReportsPage'
 import SASurveysPage from './SASurveysPage'
+import AdminSurveyBuilder from '../admin/AdminSurveyBuilder'
+import AdminSurveyResults from '../admin/AdminSurveyResults'
 
 const navItems = [
   { to: '/super-admin',          icon: LayoutDashboard, label: 'Dashboard',   end: true },
@@ -100,6 +102,8 @@ export default function SuperAdminLayout() {
             <Route index element={<SADashboard />} />
             <Route path="kurumlar" element={<SATenantsPage />} />
             <Route path="anketler" element={<SASurveysPage />} />
+            <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
+            <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
             <Route path="kullanicilar" element={<SAUsersPage />} />
             <Route path="raporlar" element={<SAReportsPage />} />
             <Route path="*" element={<Navigate to="/super-admin" replace />} />

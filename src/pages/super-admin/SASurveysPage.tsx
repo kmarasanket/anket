@@ -257,7 +257,7 @@ export default function SASurveysPage() {
                         </a>
 
                         <Link 
-                          to={`/admin/anketler/${survey.id}/sonuclar`}
+                          to={`/super-admin/anketler/${survey.id}/sonuclar`}
                           className="btn-sm btn-ghost hover:bg-purple-500/10 hover:text-purple-400"
                           title="Sonuçlar"
                         >
@@ -267,7 +267,7 @@ export default function SASurveysPage() {
                         <div className="w-px h-4 bg-dark-800 mx-1" />
 
                         <Link 
-                          to={`/admin/anketler/${survey.id}/duzenle`}
+                          to={`/super-admin/anketler/${survey.id}/duzenle`}
                           className="btn-sm btn-ghost hover:bg-blue-500/10 hover:text-blue-400"
                           title="Düzenle"
                         >
