@@ -272,7 +272,9 @@ export default function PublicSurveyPage() {
                   <Building2 className="w-6 h-6 text-primary-400" />
                 </div>
             )}
-            <p className="text-xs font-semibold text-dark-400 uppercase tracking-widest">{tenant?.name}</p>
+            <p className="text-sm sm:text-base font-semibold text-dark-300 uppercase tracking-widest mb-1">
+              {tenant?.name}
+            </p>
             <h1 className="text-3xl sm:text-4xl font-display font-bold text-dark-50 leading-tight">
               {survey.title}
             </h1>
