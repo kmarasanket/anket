@@ -179,7 +179,7 @@ export default function SASurveysPage() {
   const handleDelete = async (id: string, title: string) => {
     if (confirm(`'${title}' anketini MERKEZİ olarak silmek üzeresiniz. Emin misiniz?`)) {
       try {
-        const { error } = await supabase.from('surveys').delete().eq('id', id)
+        const { error } = await httpFrom('surveys').delete().eq('id', id).execute()
         if (error) throw error
         addNotification('Anket kalıcı olarak silindi.', 'success')
         fetchData()
