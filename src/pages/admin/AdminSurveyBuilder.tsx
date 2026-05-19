@@ -39,7 +39,8 @@ export default function AdminSurveyBuilder() {
     status: 'active' as 'active' | 'closed',
     welcome_message: '',
     thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.',
-    slug: ''
+    slug: '',
+    tenant_id: ''
   })
 
   // Sorular Listesi
@@ -76,7 +77,8 @@ export default function AdminSurveyBuilder() {
             status: survey.status,
             welcome_message: survey.welcome_message || '',
             thank_you_message: survey.thank_you_message || '',
-            slug: survey.slug
+            slug: survey.slug,
+            tenant_id: survey.tenant_id
           })
           setQuestions(questionsRes.data || [])
         }
@@ -156,7 +158,7 @@ export default function AdminSurveyBuilder() {
       addNotification('Anket kaydetme yetkiniz bulunmamaktadır (Salt Okunur).', 'warning')
       return
     }
-    if (!tenant || !user) {
+    if ((profile?.role !== 'super_admin' && !tenant) || !user) {
       addNotification('Kurum veya kullanıcı bilgisi eksik, lütfen sayfayı yenileyin.', 'error')
       return
     }
@@ -181,7 +183,7 @@ export default function AdminSurveyBuilder() {
 
       const { error: rpcError } = await httpRpc('save_survey_secure', {
         p_id: surveyId,
-        p_tenant_id: tenant.id,
+        p_tenant_id: surveyData.tenant_id || tenant?.id || '',
         p_title: surveyData.title.trim(),
         p_description: surveyData.description || null,
         p_slug: finalSlug,

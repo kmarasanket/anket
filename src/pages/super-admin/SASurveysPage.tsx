@@ -5,7 +5,7 @@ import {
   ExternalLink, Globe, Building2, ChevronRight, X, Check
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { slugify, generateUUID } from '../../lib/utils'
+import { slugify, generateUUID, formatDate } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useAuthStore } from '../../stores/authStore'
 import { httpFrom } from '../../lib/supabaseHttp'
@@ -23,6 +23,13 @@ export default function SASurveysPage() {
   const [targetTenantId, setTargetTenantId] = useState('')
   const [cloning, setCloning] = useState(false)
   const { addNotification } = useNotificationStore()
+
+  // Yeni Anket Oluşturma States
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [newSurveyTitle, setNewSurveyTitle] = useState('')
+  const [newSurveyDescription, setNewSurveyDescription] = useState('')
+  const [newSurveyTenantId, setNewSurveyTenantId] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
@@ -119,6 +126,56 @@ export default function SASurveysPage() {
     }
   }
 
+  const handleCreate = async () => {
+    if (!newSurveyTitle.trim() || !newSurveyTenantId || !profile) return
+    
+    setCreating(true)
+    try {
+      const newSlug = `${slugify(newSurveyTitle)}-${Math.random().toString(36).substr(2, 5)}`
+      const newSurveyId = generateUUID()
+      const surveyPayload = {
+        id: newSurveyId,
+        tenant_id: newSurveyTenantId,
+        title: newSurveyTitle.trim(),
+        description: newSurveyDescription.trim(),
+        slug: newSlug,
+        status: 'draft',
+        welcome_message: 'Aşağıda yer alan ifadeler ile ilgili geri bildirimleriniz, sizlere daha kaliteli hizmet sunmayı hedefleyen kurumumuz için büyük önem taşımaktadır.',
+        thank_you_message: 'Ankete katıldığınız için teşekkür ederiz.',
+        allow_multiple_responses: true,
+        track_ip: true,
+        use_cookies: true,
+        require_login: false,
+        settings: {},
+        created_by: profile.id,
+        created_at: new Date().toISOString()
+      }
+
+      const { error: surveyError } = await httpFrom('surveys').insert(surveyPayload)
+      if (surveyError) throw surveyError
+
+      addNotification('Anket başarıyla oluşturuldu! Düzenleme sayfasına yönlendiriliyorsunuz...', 'success')
+      setIsCreateModalOpen(false)
+      
+      // Temizle
+      setNewSurveyTitle('')
+      setNewSurveyDescription('')
+      setNewSurveyTenantId('')
+      
+      fetchData()
+      
+      // AdminSurveyBuilder'a yönlendir (soruları tasarlayabilmesi için)
+      setTimeout(() => {
+        window.location.href = `/admin/anketler/${newSurveyId}/duzenle`
+      }, 500)
+    } catch (err: any) {
+      console.error('Create error:', err)
+      addNotification('Anket oluşturulurken bir hata oluştu: ' + (err.message || 'Bilinmeyen hata'), 'error')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const handleDelete = async (id: string, title: string) => {
     if (confirm(`'${title}' anketini MERKEZİ olarak silmek üzeresiniz. Emin misiniz?`)) {
       try {
@@ -148,6 +205,12 @@ export default function SASurveysPage() {
           <h1 className="page-title">Merkezi Anket Yönetimi</h1>
           <p className="page-subtitle">Tüm kurumlara ait toplam {surveys.length} anket bulunuyor</p>
         </div>
+        <button 
+          onClick={() => setIsCreateModalOpen(true)} 
+          className="btn-md btn-primary"
+        >
+          <Plus className="w-4 h-4" /> Yeni Anket Ekle
+        </button>
       </div>
 
       <div className="relative">
@@ -284,6 +347,75 @@ export default function SASurveysPage() {
                 className="btn-md btn-primary flex-1 shadow-glow"
               >
                 {cloning ? 'Kopyalanıyor...' : 'Kopyalamayı Başlat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Yeni Anket Oluşturma Modalı */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-dark-800 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-dark-50">Yeni Anket Oluştur</h3>
+              <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-dark-400 hover:text-white rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-dark-300">Anket Başlığı</label>
+                <input 
+                  type="text"
+                  value={newSurveyTitle}
+                  onChange={e => setNewSurveyTitle(e.target.value)}
+                  placeholder="Örn: Hasta Memnuniyeti Anketi"
+                  className="input w-full bg-dark-950 border-dark-700 focus:border-primary-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-dark-300">Açıklama (Opsiyonel)</label>
+                <textarea 
+                  value={newSurveyDescription}
+                  onChange={e => setNewSurveyDescription(e.target.value)}
+                  placeholder="Anket hakkında kısa bilgi..."
+                  className="input w-full bg-dark-950 border-dark-700 min-h-[80px]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-dark-300">Ait Olduğu Kurum</label>
+                <select 
+                  value={newSurveyTenantId}
+                  onChange={e => setNewSurveyTenantId(e.target.value)}
+                  className="input w-full bg-dark-950 border-dark-700 focus:border-primary-500"
+                >
+                  <option value="">Kurum Seçin...</option>
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-dark-500">Anket, seçilen kuruma 'Taslak' durumunda oluşturulacaktır.</p>
+              </div>
+            </div>
+
+            <div className="p-6 bg-dark-900/50 flex gap-3">
+              <button 
+                onClick={() => setIsCreateModalOpen(false)} 
+                className="btn-md btn-ghost flex-1"
+                disabled={creating}
+              >
+                İptal
+              </button>
+              <button 
+                onClick={handleCreate} 
+                disabled={!newSurveyTitle.trim() || !newSurveyTenantId || creating}
+                className="btn-md btn-primary flex-1 shadow-glow"
+              >
+                {creating ? 'Oluşturuluyor...' : 'Anketi Oluştur'}
               </button>
             </div>
           </div>
