@@ -5,7 +5,7 @@ import { useNotificationStore } from './notificationStore'
 import type { Profile, Tenant } from '../lib/database.types'
 
 interface AuthState {
-  user: { id: string; email: string } | null
+  user: { id: string; email: string; user_metadata?: any } | null
   profile: Profile | null
   tenant: Tenant | null
   loading: boolean
@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data: { session } } = await supabase.auth.getSession()
           if (session?.user) {
-            set({ user: { id: session.user.id, email: session.user.email! } })
+            set({ user: { id: session.user.id, email: session.user.email!, user_metadata: session.user.user_metadata } })
             await get().refreshProfile()
           }
         } catch (err) {
@@ -44,7 +44,7 @@ export const useAuthStore = create<AuthState>()(
         // Auth state değişikliklerini dinle
         supabase.auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_IN' && session?.user) {
-            set({ user: { id: session.user.id, email: session.user.email! } })
+            set({ user: { id: session.user.id, email: session.user.email!, user_metadata: session.user.user_metadata } })
             await get().refreshProfile()
           } else if (event === 'SIGNED_OUT') {
             set({ user: null, profile: null, tenant: null })
@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>()(
           if (error) throw error
           
           if (data.user) {
-            set({ user: { id: data.user.id, email: data.user.email! } })
+            set({ user: { id: data.user.id, email: data.user.email!, user_metadata: data.user.user_metadata } })
             await get().refreshProfile()
           }
           useNotificationStore.getState().addNotification('Giriş başarılı. Hoş geldiniz!', 'success')

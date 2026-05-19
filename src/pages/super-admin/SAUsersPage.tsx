@@ -3,6 +3,7 @@ import { Plus, Search, ToggleLeft, ToggleRight, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useNotificationStore } from '../../stores/notificationStore'
 import type { Profile, Tenant } from '../../lib/database.types'
+import { validatePassword } from '../../lib/utils'
 
 export default function SAUsersPage() {
   const [users, setUsers] = useState<(Profile & { tenant_name?: string })[]>([])
@@ -44,6 +45,12 @@ export default function SAUsersPage() {
         return
     }
 
+    const passwordError = validatePassword(formData.password)
+    if (passwordError) {
+      addNotification(passwordError, "warning")
+      return
+    }
+
     setSaving(true)
     try {
       const { createClient } = await import('@supabase/supabase-js')
@@ -56,6 +63,11 @@ export default function SAUsersPage() {
       const { data: authData, error: authError } = await tempSupabase.auth.signUp({
         email: formData.email.trim(),
         password: formData.password,
+        options: {
+          data: {
+            must_change_password: true
+          }
+        }
       })
       if (authError) throw authError
 
@@ -132,7 +144,7 @@ export default function SAUsersPage() {
               <div>
                 <label className="label">Şifre *</label>
                 <input value={formData.password} onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
-                  type="password" placeholder="En az 6 karakter" className="input" />
+                  type="password" placeholder="En az 8 karakter (Büyük, Küçük, Sayı, Özel)" className="input" />
               </div>
               <div>
                 <label className="label">Şifre Tekrarı *</label>

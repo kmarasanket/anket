@@ -26,8 +26,10 @@ function PageLoader() {
 }
 
 
+import ChangePasswordModal from './components/auth/ChangePasswordModal'
+
 function App() {
-  const { initialize, initialized } = useAuthStore()
+  const { initialize, initialized, user } = useAuthStore()
 
   useEffect(() => {
     initialize()
@@ -44,9 +46,12 @@ function App() {
     )
   }
 
+  const mustChange = user?.user_metadata?.must_change_password === true
+
   return (
     <BrowserRouter>
       <NotificationContainer />
+      <ChangePasswordModal isOpen={mustChange} onClose={() => {}} forceChange={true} />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public routes */}

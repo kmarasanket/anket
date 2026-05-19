@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2 } from 'lucide-react'
+import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
+import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
 
 // Pages
 import AdminDashboard from './AdminDashboard'
@@ -11,6 +13,7 @@ import AdminSurveyResults from './AdminSurveyResults'
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
 
   const navItems = [
     { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -65,6 +68,13 @@ export default function AdminLayout() {
             </div>
           </div>
           <button 
+            onClick={() => setIsPasswordModalOpen(true)}
+            className="sidebar-item w-full text-dark-300 hover:text-white hover:bg-dark-800"
+          >
+            <Key className="w-4 h-4 text-dark-400" />
+            <span>Şifre Değiştir</span>
+          </button>
+          <button 
             onClick={async () => {
               await logout()
               window.location.href = '/login'
@@ -76,6 +86,8 @@ export default function AdminLayout() {
           </button>
         </div>
       </aside>
+
+      <ChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
 
       {/* Main content */}
       <main className="flex-1 ml-[var(--sidebar-width)] min-h-screen">
