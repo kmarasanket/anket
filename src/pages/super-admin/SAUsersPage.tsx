@@ -65,7 +65,9 @@ export default function SAUsersPage() {
         password: formData.password,
         options: {
           data: {
-            must_change_password: true
+            must_change_password: true,
+            role: formData.role,
+            tenant_id: formData.role === 'admin' ? formData.tenant_id : null
           }
         }
       })
