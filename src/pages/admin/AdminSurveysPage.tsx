@@ -347,7 +347,7 @@ export default function AdminSurveysPage() {
               
               {/* Left Column: QR Code Preview Card */}
               <div className="md:col-span-5 flex justify-center w-full">
-                <div className="flex flex-col items-center justify-center bg-white p-5 rounded-xl border border-gray-200 w-full max-w-[240px] relative" id="qr-code-print-area" style={{ color: 'black' }}>
+                <div className="flex flex-col items-center justify-center bg-white p-5 rounded-xl border border-gray-200 w-full max-w-[300px] relative" id="qr-code-print-area" style={{ color: 'black' }}>
                   <div className="flex flex-col items-center w-full" id="qr-print-body">
                     <img id="qr-logo" src="/logo_ism.png" alt="Logo" className="w-auto object-contain hidden" style={{ height: '0px' }} />
                     
@@ -355,9 +355,9 @@ export default function AdminSurveysPage() {
                       {tenant?.name?.toUpperCase() || 'KAHRAMANMARAŞ İL SAĞLIK MÜDÜRLÜĞÜ'}
                     </p>
                     
-                    <p id="qr-title" className="text-black font-bold text-center text-xs leading-tight w-full break-words mb-3 mt-1" style={{ color: 'black' }}>{shareModal.title}</p>
-                    <QRCodeCanvas id="qr-canvas" value={shareModal.link} size={320} level={"H"} style={{ width: '130px', height: '130px' }} />
-                    <p id="qr-instructions" className="text-black/60 text-[9px] text-center mt-2.5 leading-tight">Telefonunuzun kamerasını okutarak ankete katılabilirsiniz.</p>
+                    <p id="qr-title" className="text-black font-bold text-center text-sm leading-tight w-full break-words mb-4 mt-1" style={{ color: 'black' }}>{shareModal.title}</p>
+                    <QRCodeCanvas id="qr-canvas" value={shareModal.link} size={320} level={"H"} style={{ width: '180px', height: '180px' }} />
+                    <p id="qr-instructions" className="text-black/60 text-[10px] text-center mt-4 leading-tight">Telefonunuzun kamerasını okutarak ankete katılabilirsiniz.</p>
                   </div>
                   
                   <p id="qr-footer" className="text-black/60 text-[9px] text-center hidden">
@@ -367,16 +367,13 @@ export default function AdminSurveysPage() {
               </div>
 
               {/* Right Column: Link Copy & PDF Button */}
-              <div className="md:col-span-7 space-y-5 w-full">
+              <div className="md:col-span-7 space-y-6 w-full">
                 <div className="space-y-2">
                   <label className="text-xs text-dark-400 font-medium">Anket Linki (Otomatik Kopyalandı)</label>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="text" 
-                      readOnly 
-                      value={shareModal.link} 
-                      className="input flex-1 text-sm bg-dark-800 border-dark-700 text-dark-200"
-                    />
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                    <div className="flex-1 bg-dark-800 border border-dark-700 text-dark-200 rounded-lg p-3 text-sm break-all leading-relaxed select-all">
+                      {shareModal.link}
+                    </div>
                     <button 
                       onClick={() => {
                         navigator.clipboard.writeText(shareModal.link)
