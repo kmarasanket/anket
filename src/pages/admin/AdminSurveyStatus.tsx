@@ -136,9 +136,9 @@ export default function AdminSurveyStatus() {
                 </div>
               </div>
               <div>
-                <p className="text-dark-400 text-xs mb-1">Kota Dolarak Kapananlar</p>
+                <p className="text-dark-400 text-xs mb-1">Hedefe Ulaşan Anketler</p>
                 <p className="text-2xl font-display font-bold text-dark-50 text-emerald-400">
-                  {data.filter(s => s.is_blocked).length}
+                  {data.filter(s => s.target_count && s.completed_count >= s.target_count).length}
                 </p>
               </div>
             </div>
@@ -155,7 +155,7 @@ export default function AdminSurveyStatus() {
                   %{Math.round(
                     data.reduce((acc, curr) => {
                       if (!curr.target_count) return acc
-                      return acc + Math.min((curr.completed_count / curr.target_count) * 100, 150)
+                      return acc + ((curr.completed_count / curr.target_count) * 100)
                     }, 0) / (data.filter(s => s.target_count).length || 1)
                   )}
                 </p>
@@ -168,25 +168,19 @@ export default function AdminSurveyStatus() {
             {data.map(survey => {
               const target = survey.target_count
               const comp = survey.completed_count
-              const maxAllowed = survey.max_allowed
               const progressPercent = target ? Math.round((comp / target) * 100) : 0
-              const maxPercent = target ? Math.round((comp / maxAllowed!) * 100) : 0
 
               let statusColor = 'text-blue-400 bg-blue-500/10'
               let statusText = 'Katılım Alıyor'
               let statusIcon = <TrendingUp className="w-4 h-4" />
 
-              if (survey.is_blocked) {
-                statusColor = 'text-red-400 bg-red-500/10'
-                statusText = 'Kota Doldu (Kapalı)'
-                statusIcon = <Ban className="w-4 h-4" />
-              } else if (target && comp >= target) {
+              if (target && comp >= target) {
                 statusColor = 'text-emerald-400 bg-emerald-500/10'
-                statusText = 'Hedefe Ulaşıldı (%50 Limit İçinde)'
+                statusText = comp > target ? `Hedef Aşıldı (+${comp - target})` : 'Hedefe Ulaşıldı'
                 statusIcon = <CheckCircle className="w-4 h-4" />
               } else if (target && comp >= target * 0.8) {
                 statusColor = 'text-warning-400 bg-warning-500/10'
-                statusText = 'Kota Yaklaşıyor'
+                statusText = 'Hedefe Yakın'
                 statusIcon = <AlertTriangle className="w-4 h-4" />
               }
 
@@ -249,20 +243,20 @@ export default function AdminSurveyStatus() {
                     </div>
 
                     <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50 col-span-2 md:col-span-1">
-                      <p className="text-xs text-dark-500 mb-1">Kalan / Kapanış Limiti</p>
+                      <p className="text-xs text-dark-500 mb-1">Hedef Kalan / Kota Aşımı</p>
                       <p className="text-xl font-bold text-dark-100">
                         {target ? (
-                          maxAllowed && comp >= maxAllowed ? (
-                            <span className="text-red-400">Kilitli</span>
+                          comp >= target ? (
+                            <span className="text-emerald-400">+{comp - target}</span>
                           ) : (
-                            `${Math.max(0, target - comp)} / ${maxAllowed}`
+                            `${target - comp}`
                           )
                         ) : (
                           'Sınırsız'
                         )}
                       </p>
                       <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
-                        {survey.period_type === 'monthly' ? 'Kalan / Maks (%50 Ekli)' : survey.period_type === 'yearly' ? 'Kalan / Maks (%50 Ekli)' : 'Limit'}
+                        {target ? (comp >= target ? 'Kota Üzeri Katılım' : 'Kalan Gerekli Katılım') : 'Limit Yok'}
                       </p>
                     </div>
                   </div>
@@ -272,39 +266,23 @@ export default function AdminSurveyStatus() {
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs font-semibold">
                         <span className="text-dark-400">Dönem İlerlemesi</span>
-                        <span className={comp >= maxAllowed! ? 'text-red-400' : 'text-primary-400'}>
-                          %{progressPercent} (Limit: %{Math.round((maxAllowed! / target) * 100)})
+                        <span className="text-primary-400">
+                          %{progressPercent}
                         </span>
                       </div>
                       <div className="relative w-full h-3 bg-dark-900 rounded-full overflow-hidden border border-dark-800">
-                        {/* %100 Hedef Çizgisi (n sayısı 150%'lik genleşmenin 66.67%'sine denk gelir) */}
-                        <div className="absolute top-0 bottom-0 left-[66.67%] w-0.5 bg-emerald-500/50 z-10" title="%100 Hedef" />
-                        
                         <div
                           className={`h-full rounded-full transition-all duration-700 ${
-                            survey.is_blocked
-                              ? 'bg-gradient-to-r from-red-600 to-red-500'
-                              : comp >= target
+                            comp >= target
                               ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
                               : 'bg-gradient-to-r from-primary-500 to-primary-400'
                           }`}
-                          style={{ width: `${Math.min((comp / maxAllowed!) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((comp / target) * 100, 100)}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-dark-500">
                         <span>Başlangıç</span>
                         <span>Hedef ({target})</span>
-                        <span>Maks. Limit (%50) ({maxAllowed})</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bilgilendirici İkaz Mesajları */}
-                  {survey.is_blocked && (
-                    <div className="flex items-start gap-2.5 p-3.5 bg-red-500/10 rounded-xl border border-red-500/20 text-xs text-red-400">
-                      <Ban className="w-4 h-4 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold">Katılıma Kapatıldı:</span> Bu anket için hedeflenen kota miktarı (%50 tolerans payı dahil olmak üzere {maxAllowed} katılım) doldurulduğundan, yeni veri girişi bu dönem için otomatik olarak kilitlenmiştir. Gelecek dönemde otomatik olarak tekrar açılacaktır.
                       </div>
                     </div>
                   )}

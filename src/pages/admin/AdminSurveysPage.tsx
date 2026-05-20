@@ -141,19 +141,16 @@ export default function AdminSurveysPage() {
               : quota?.period_type === 'yearly' ? `${now.getFullYear()} Yılı` : null
 
             const progressPct = quota?.target_count
-              ? Math.min(Math.round((quota.completed_count / quota.target_count) * 100), 150)
+              ? Math.round((quota.completed_count / quota.target_count) * 100)
               : 0
 
             let statusColor = 'text-blue-400'
             let statusBg = 'bg-blue-500/10 border-blue-500/20'
             let StatusIcon = TrendingUp
             let statusLabel = 'Devam Ediyor'
-            if (quota?.is_blocked) {
-              statusColor = 'text-red-400'; statusBg = 'bg-red-500/10 border-red-500/20'
-              StatusIcon = Ban; statusLabel = 'Kota Doldu'
-            } else if (quota?.target_count && quota.completed_count >= quota.target_count) {
+            if (quota?.target_count && quota.completed_count >= quota.target_count) {
               statusColor = 'text-emerald-400'; statusBg = 'bg-emerald-500/10 border-emerald-500/20'
-              StatusIcon = CheckCircle; statusLabel = 'Hedefe Ulaşıldı'
+              StatusIcon = CheckCircle; statusLabel = quota.completed_count > quota.target_count ? `Hedef Aşıldı` : 'Hedefe Ulaşıldı'
             } else if (quota?.target_count && quota.completed_count >= quota.target_count * 0.8) {
               statusColor = 'text-amber-400'; statusBg = 'bg-amber-500/10 border-amber-500/20'
               StatusIcon = AlertTriangle; statusLabel = 'Hedefe Yakın'
@@ -190,7 +187,11 @@ export default function AdminSurveysPage() {
                         Katılım: <span className={statusColor}>{quota.completed_count}</span>
                       </span>
                       <span className="text-dark-400 border-l border-dark-700 pl-3">
-                        Limit: <span className="text-dark-200">{quota.max_allowed ?? '—'}</span>
+                        {quota.completed_count >= (quota.target_count ?? 0) ? (
+                          <>Kota Aşımı: <span className="text-emerald-400 font-bold">+{quota.completed_count - (quota.target_count ?? 0)}</span></>
+                        ) : (
+                          <>Kalan: <span className="text-dark-200">{(quota.target_count ?? 0) - quota.completed_count}</span></>
+                        )}
                       </span>
                       <span className="text-dark-400 border-l border-dark-700 pl-3">
                         İlerleme: <span className={statusColor}>%{progressPct}</span>
@@ -200,9 +201,9 @@ export default function AdminSurveysPage() {
                         <div className="relative h-1.5 bg-dark-800 rounded-full flex-1 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
-                              quota.is_blocked ? 'bg-red-500' : quota.completed_count >= (quota.target_count ?? 0) ? 'bg-emerald-500' : 'bg-primary-500'
+                              quota.completed_count >= (quota.target_count ?? 0) ? 'bg-emerald-500' : 'bg-primary-500'
                             }`}
-                            style={{ width: `${Math.min((quota.completed_count / (quota.max_allowed || 1)) * 100, 100)}%` }}
+                            style={{ width: `${Math.min((quota.completed_count / (quota.target_count || 1)) * 100, 100)}%` }}
                           />
                         </div>
                       </div>

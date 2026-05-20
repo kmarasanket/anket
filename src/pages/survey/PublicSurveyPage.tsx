@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Building2, ArrowRight, Ban } from 'lucide-react'
-import { httpFrom, httpRpc } from '../../lib/supabaseHttp'
+import { Building2, ArrowRight } from 'lucide-react'
+import { httpFrom } from '../../lib/supabaseHttp'
 import { cookies, generateSessionToken, hashIP, generateUUID } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
 
@@ -41,17 +41,6 @@ export default function PublicSurveyPage() {
 
         if (s.status !== 'active') {
           setSurvey({ ...s, is_closed: true })
-          setLoading(false)
-          return
-        }
-
-        // 2. Kontrol et: Kota sınırı aşıldı mı?
-        const { data: quotaStatus } = await httpRpc('get_tenant_survey_status', {
-          p_tenant_id: s.tenant_id
-        })
-        const thisSurveyQuota = (quotaStatus || []).find((st: any) => st.survey_id === s.id)
-        if (thisSurveyQuota?.is_blocked) {
-          setSurvey({ ...s, is_closed: true, is_quota_blocked: true })
           setLoading(false)
           return
         }
@@ -255,20 +244,10 @@ export default function PublicSurveyPage() {
     <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center">
       <div className="card p-12 max-w-md w-full">
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-          {survey.is_quota_blocked ? (
-            <Ban className="w-8 h-8 text-red-500" />
-          ) : (
-            <div className="w-8 h-8 bg-red-500 rounded-full" />
-          )}
+          <div className="w-8 h-8 bg-red-500 rounded-full" />
         </div>
-        <h1 className="text-2xl font-bold text-dark-50 mb-2">
-          {survey.is_quota_blocked ? 'Kota Sınırına Ulaşıldı' : 'Anket Pasif'}
-        </h1>
-        <p className="text-dark-400">
-          {survey.is_quota_blocked 
-            ? 'Bu anketin bu dönem için hedeflenen katılım sayısına ulaşılmıştır. Göstermiş olduğunuz ilgi için teşekkür ederiz.'
-            : 'Bu anket şu an yanıt alımına kapalıdır. İlginiz için teşekkür ederiz.'}
-        </p>
+        <h1 className="text-2xl font-bold text-dark-50 mb-2">Anket Pasif</h1>
+        <p className="text-dark-400">Bu anket şu an yanıt alımına kapalıdır. İlginiz için teşekkür ederiz.</p>
       </div>
     </div>
   )
