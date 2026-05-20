@@ -147,7 +147,7 @@ export default function AdminSurveyStatus() {
                   %{Math.round(
                     data.reduce((acc, curr) => {
                       if (!curr.target_count) return acc
-                      return acc + Math.min((curr.completed_count / curr.target_count) * 100, 105)
+                      return acc + Math.min((curr.completed_count / curr.target_count) * 100, 150)
                     }, 0) / (data.filter(s => s.target_count).length || 1)
                   )}
                 </p>
@@ -174,7 +174,7 @@ export default function AdminSurveyStatus() {
                 statusIcon = <Ban className="w-4 h-4" />
               } else if (target && comp >= target) {
                 statusColor = 'text-emerald-400 bg-emerald-500/10'
-                statusText = 'Hedefe Ulaşıldı (%5 Limit İçinde)'
+                statusText = 'Hedefe Ulaşıldı (%50 Limit İçinde)'
                 statusIcon = <CheckCircle className="w-4 h-4" />
               } else if (target && comp >= target * 0.8) {
                 statusColor = 'text-warning-400 bg-warning-500/10'
@@ -260,8 +260,8 @@ export default function AdminSurveyStatus() {
                         </span>
                       </div>
                       <div className="relative w-full h-3 bg-dark-900 rounded-full overflow-hidden border border-dark-800">
-                        {/* %100 Hedef Çizgisi */}
-                        <div className="absolute top-0 bottom-0 left-[95.2%] w-0.5 bg-red-500/50 z-10" title="%100 Hedef" />
+                        {/* %100 Hedef Çizgisi (n sayısı 150%'lik genleşmenin 66.67%'sine denk gelir) */}
+                        <div className="absolute top-0 bottom-0 left-[66.67%] w-0.5 bg-emerald-500/50 z-10" title="%100 Hedef" />
                         
                         <div
                           className={`h-full rounded-full transition-all duration-700 ${
@@ -277,7 +277,7 @@ export default function AdminSurveyStatus() {
                       <div className="flex justify-between text-[10px] text-dark-500">
                         <span>Başlangıç</span>
                         <span>Hedef ({target})</span>
-                        <span>Maks. Limit (%5) ({maxAllowed})</span>
+                        <span>Maks. Limit (%50) ({maxAllowed})</span>
                       </div>
                     </div>
                   )}
@@ -287,7 +287,7 @@ export default function AdminSurveyStatus() {
                     <div className="flex items-start gap-2.5 p-3.5 bg-red-500/10 rounded-xl border border-red-500/20 text-xs text-red-400">
                       <Ban className="w-4 h-4 shrink-0 mt-0.5" />
                       <div>
-                        <span className="font-bold">Katılıma Kapatıldı:</span> Bu anket için hedeflenen kota miktarı (%5 tolerans payı dahil olmak üzere {maxAllowed} katılım) doldurulduğundan, yeni veri girişi bu dönem için otomatik olarak kilitlenmiştir. Gelecek dönemde otomatik olarak tekrar açılacaktır.
+                        <span className="font-bold">Katılıma Kapatıldı:</span> Bu anket için hedeflenen kota miktarı (%50 tolerans payı dahil olmak üzere {maxAllowed} katılım) doldurulduğundan, yeni veri girişi bu dönem için otomatik olarak kilitlenmiştir. Gelecek dönemde otomatik olarak tekrar açılacaktır.
                       </div>
                     </div>
                   )}
