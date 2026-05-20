@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Building2, ArrowRight } from 'lucide-react'
+import { Building2, ArrowRight, Pause } from 'lucide-react'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { cookies, generateSessionToken, hashIP, generateUUID } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -241,13 +241,22 @@ export default function PublicSurveyPage() {
   )
 
   if (survey.is_closed) return (
-    <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center">
-      <div className="card p-12 max-w-md w-full">
-        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-          <div className="w-8 h-8 bg-red-500 rounded-full" />
+    <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+      {/* Background radial glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
+      
+      <div className="card p-12 max-w-lg w-full border border-dark-800/80 bg-dark-900/40 backdrop-blur-xl relative z-10 shadow-[0_0_50px_rgba(0,0,0,0.3)]">
+        {/* Pulsing pause icon container */}
+        <div className="w-20 h-20 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-500/20 shadow-[0_0_30px_rgba(245,158,11,0.1)] relative">
+          <div className="absolute inset-0 rounded-2xl bg-amber-500/5 animate-ping opacity-75" />
+          <Pause className="w-10 h-10 text-amber-500 relative z-10" />
         </div>
-        <h1 className="text-2xl font-bold text-dark-50 mb-2">Anket Pasif</h1>
-        <p className="text-dark-400">Bu anket şu an yanıt alımına kapalıdır. İlginiz için teşekkür ederiz.</p>
+        
+        <h1 className="text-2xl font-bold text-dark-50 mb-3 tracking-tight">Anket Geçici Olarak Durduruldu</h1>
+        <p className="text-dark-400 leading-relaxed text-sm sm:text-base">
+          Bu anket yöneticiler tarafından geçici olarak yeni katılımlara kapatılmıştır.
+          İlginiz için teşekkür ederiz, anket tekrar açıldığında yanıtlarınızı iletebilirsiniz.
+        </p>
       </div>
     </div>
   )

@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import {
   ClipboardCheck, Users, Percent, HelpCircle,
   AlertTriangle, CheckCircle, Ban, ArrowRight,
-  TrendingUp, Calendar
+  TrendingUp, Calendar, Pause, Play
 } from 'lucide-react'
-import { httpRpc } from '../../lib/supabaseHttp'
+import { httpRpc, httpFrom } from '../../lib/supabaseHttp'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 
@@ -49,6 +49,28 @@ export default function AdminSurveyStatus() {
   useEffect(() => {
     loadQuotaStatus()
   }, [tenant?.id])
+
+  const handleToggleStatus = async (id: string, title: string, currentStatus: string) => {
+    const isClosing = currentStatus === 'active'
+    const message = isClosing
+      ? `'${title}' anketini geçici olarak katılıma kapatmak istediğinize emin misiniz?`
+      : `'${title}' anketini tekrar katılıma açmak istediğinize emin misiniz?`
+    
+    if (confirm(message)) {
+      try {
+        const newStatus = isClosing ? 'closed' : 'active'
+        const { error } = await httpFrom('surveys').update({ status: newStatus }).eq('id', id).execute()
+        if (error) throw error
+        addNotification(
+          isClosing ? 'Anket katılıma kapatıldı.' : 'Anket katılıma açıldı.',
+          'success'
+        )
+        loadQuotaStatus()
+      } catch (err: any) {
+        addNotification('Anket durumu güncellenirken bir hata oluştu.', 'error')
+      }
+    }
+  }
 
   const getSurveyTypeLabel = (type: string) => {
     switch (type) {
@@ -174,7 +196,11 @@ export default function AdminSurveyStatus() {
               let statusText = 'Katılım Alıyor'
               let statusIcon = <TrendingUp className="w-4 h-4" />
 
-              if (target && comp >= target) {
+              if (survey.status === 'closed') {
+                statusColor = 'text-red-400 bg-red-500/10'
+                statusText = 'Duraklatıldı (Kapalı)'
+                statusIcon = <Pause className="w-4 h-4" />
+              } else if (target && comp >= target) {
                 statusColor = 'text-emerald-400 bg-emerald-500/10'
                 statusText = comp > target ? `Hedef Aşıldı (+${comp - target})` : 'Hedefe Ulaşıldı'
                 statusIcon = <CheckCircle className="w-4 h-4" />
@@ -200,9 +226,32 @@ export default function AdminSurveyStatus() {
                       <h3 className="font-semibold text-lg text-dark-50">{survey.title}</h3>
                     </div>
 
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-sm ${statusColor} self-start sm:self-center`}>
-                      {statusIcon}
-                      {statusText}
+                    <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
+                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-sm ${statusColor}`}>
+                        {statusIcon}
+                        {statusText}
+                      </div>
+
+                      <button
+                        onClick={() => handleToggleStatus(survey.survey_id, survey.title, survey.status)}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-semibold text-sm border transition-colors ${
+                          survey.status === 'active'
+                            ? 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
+                            : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        {survey.status === 'active' ? (
+                          <>
+                            <Pause className="w-3.5 h-3.5" />
+                            Durdur
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5" />
+                            Başlat
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
 

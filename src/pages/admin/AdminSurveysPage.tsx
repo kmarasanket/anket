@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, X, Download, Share2, TrendingUp, CheckCircle, Ban, AlertTriangle, HelpCircle } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, X, Download, Share2, TrendingUp, CheckCircle, Ban, AlertTriangle, HelpCircle, Pause, Play } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
 import { QRCodeCanvas } from 'qrcode.react'
 import { httpFrom, httpRpc } from '../../lib/supabaseHttp'
@@ -68,6 +68,28 @@ export default function AdminSurveysPage() {
     navigator.clipboard.writeText(url)
     addNotification('Anket linki otomatik kopyalandı.', 'success')
     setShareModal({ isOpen: true, link: url, title })
+  }
+
+  const handleToggleStatus = async (id: string, title: string, currentStatus: string) => {
+    const isClosing = currentStatus === 'active'
+    const message = isClosing
+      ? `'${title}' anketini geçici olarak katılıma kapatmak istediğinize emin misiniz?`
+      : `'${title}' anketini tekrar katılıma açmak istediğinize emin misiniz?`
+    
+    if (confirm(message)) {
+      try {
+        const newStatus = isClosing ? 'closed' : 'active'
+        const { error } = await httpFrom('surveys').update({ status: newStatus }).eq('id', id).execute()
+        if (error) throw error
+        addNotification(
+          isClosing ? 'Anket katılıma kapatıldı.' : 'Anket katılıma açıldı.',
+          'success'
+        )
+        fetchSurveys()
+      } catch (err: any) {
+        addNotification('Anket durumu güncellenirken bir hata oluştu.', 'error')
+      }
+    }
   }
 
   const handleDelete = async (id: string, title: string) => {
@@ -168,6 +190,30 @@ export default function AdminSurveysPage() {
                       {survey.title}
                     </h3>
                     <span className="shrink-0">{getStatusBadge(survey.status)}</span>
+                  </div>
+
+                  {/* Katılımı Durdur / Başlat Butonu */}
+                  <div className="mb-3">
+                    <button
+                      onClick={() => handleToggleStatus(survey.id, survey.title, survey.status)}
+                      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                        survey.status === 'active'
+                          ? 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
+                          : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      {survey.status === 'active' ? (
+                        <>
+                          <Pause className="w-3.5 h-3.5" />
+                          Katılımı Geçici Olarak Durdur
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5" />
+                          Katılımı Yeniden Başlat
+                        </>
+                      )}
+                    </button>
                   </div>
 
                   {/* Kota Durum Şeridi */}
