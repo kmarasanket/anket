@@ -281,20 +281,22 @@ export function httpFrom(table: string) {
   return { select, insert, upsert, update, delete: del }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// RPC çağrısı
-// ──────────────────────────────────────────────────────────────────────────────
 export async function httpRpc(fnName: string, params: object) {
   const token = getStoredToken()
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`
   const res = await fetchWithRetry(url, {
     method: 'POST',
-    headers: getHeaders(token, 'minimal'),
+    headers: getHeaders(token), // Default to 'representation' to receive JSON response
     body: JSON.stringify(params)
   })
   if (!res.ok) {
     const msg = await parseError(res)
     return { data: null, error: new Error(`RPC ${fnName}: ${msg}`) }
   }
-  return { data: null, error: null }
+  try {
+    const data = await res.json()
+    return { data, error: null }
+  } catch {
+    return { data: null, error: null }
+  }
 }
