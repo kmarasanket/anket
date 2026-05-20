@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key } from 'lucide-react'
+import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
 import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
@@ -11,6 +11,7 @@ import AdminSurveysPage from './AdminSurveysPage'
 import AdminSurveyBuilder from './AdminSurveyBuilder'
 import AdminSurveyResults from './AdminSurveyResults'
 import AdminSettings from './AdminSettings'
+import AdminSurveyStatus from './AdminSurveyStatus'
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
@@ -32,6 +33,7 @@ export default function AdminLayout() {
   const navItems = [
     { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard', end: true },
     { to: '/admin/anketler', icon: FileText,        label: 'Anketler'         },
+    { to: '/admin/anket-durumu', icon: ClipboardCheck, label: 'Anket Durumu'   },
     { to: '/admin/ayarlar',  icon: Settings,        label: 'Kurum Ayarları'   },
   ]
 
@@ -114,6 +116,8 @@ export default function AdminLayout() {
             <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
             {/* Settings */}
             <Route path="ayarlar" element={<AdminSettings />} />
+            {/* Survey Quotas / Status */}
+            <Route path="anket-durumu" element={<AdminSurveyStatus />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>
