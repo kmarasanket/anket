@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Building2, ArrowRight, Pause } from 'lucide-react'
+import { Building2, ArrowRight, Pause, RefreshCw } from 'lucide-react'
 import { httpFrom } from '../../lib/supabaseHttp'
 import { cookies, generateSessionToken, hashIP, generateUUID } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -16,6 +16,7 @@ export default function PublicSurveyPage() {
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   
   const [currentPage, setCurrentPage] = useState(0)
   
@@ -24,46 +25,55 @@ export default function PublicSurveyPage() {
   const [kvkkConsent, setKvkkConsent] = useState(false)
   const [missingId, setMissingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadSurvey = async () => {
-      setLoading(true)
-      try {
-        // 1. Önce anketi ve kurumu tek seferde al (slug ile)
-        const qSurvey = httpFrom('surveys').select('*, tenants(name,logo_url)')
-        qSurvey.ilike('slug', slug!)
-        const { data: s, error: sErr } = await qSurvey.single().execute()
+  const loadSurvey = async (showLoadingState = true) => {
+    if (showLoadingState) setLoading(true)
+    try {
+      // 1. Önce anketi ve kurumu tek seferde al (slug ile)
+      const qSurvey = httpFrom('surveys').select('*, tenants(name,logo_url)')
+      qSurvey.ilike('slug', slug!)
+      const { data: s, error: sErr } = await qSurvey.single().execute()
 
-        if (sErr || !s) { 
-          setErrorMsg(sErr ? sErr.message : `Slug eşleşmedi: ${slug}`)
-          setLoading(false) 
-          return 
-        }
-
-        if (s.status !== 'active') {
-          setSurvey({ ...s, is_closed: true })
-          setLoading(false)
-          return
-        }
-
-        setSurvey(s)
-        setTenant(s.tenants || null)
-
-        // 2. Soruları çek
-        const qQ = httpFrom('questions').select('*')
-        qQ.eq('survey_id', s.id)
-        qQ.order('order_index', { ascending: true })
-
-        const { data: questionsData } = await qQ.execute()
-        setQuestions(questionsData || [])
-      } catch (err: any) {
-        addNotification('Anket yüklenirken bir hata oluştu.', 'error')
-      } finally {
-        setLoading(false)
+      if (sErr || !s) { 
+        setErrorMsg(sErr ? sErr.message : `Slug eşleşmedi: ${slug}`)
+        if (showLoadingState) setLoading(false) 
+        return 
       }
-    }
 
-    if (slug) loadSurvey()
-  }, [slug, addNotification])
+      // Kurum bilgisini her zaman set et (kapalı olsa bile logo ve isim gösterimi için)
+      setTenant(s.tenants || null)
+
+      if (s.status !== 'active') {
+        setSurvey({ ...s, is_closed: true })
+        if (showLoadingState) setLoading(false)
+        return
+      }
+
+      setSurvey(s)
+
+      // 2. Soruları çek
+      const qQ = httpFrom('questions').select('*')
+      qQ.eq('survey_id', s.id)
+      qQ.order('order_index', { ascending: true })
+
+      const { data: questionsData } = await qQ.execute()
+      setQuestions(questionsData || [])
+    } catch (err: any) {
+      addNotification('Anket yüklenirken bir hata oluştu.', 'error')
+    } finally {
+      if (showLoadingState) setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (slug) loadSurvey(true)
+  }, [slug])
+
+  const handleRetry = async () => {
+    setRefreshing(true)
+    await loadSurvey(false)
+    await new Promise(resolve => setTimeout(resolve, 800)) // visual feedback
+    setRefreshing(false)
+  }
 
   // Split questions into pages based on 'section' type
   const getPages = () => {
@@ -242,21 +252,71 @@ export default function PublicSurveyPage() {
 
   if (survey.is_closed) return (
     <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
-      {/* Background radial glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
+      {/* Background ambient glows */}
+      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-primary-500/5 rounded-full blur-[100px] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
       
-      <div className="card p-12 max-w-lg w-full border border-dark-800/80 bg-dark-900/40 backdrop-blur-xl relative z-10 shadow-[0_0_50px_rgba(0,0,0,0.3)]">
-        {/* Pulsing pause icon container */}
-        <div className="w-20 h-20 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-500/20 shadow-[0_0_30px_rgba(245,158,11,0.1)] relative">
-          <div className="absolute inset-0 rounded-2xl bg-amber-500/5 animate-ping opacity-75" />
-          <Pause className="w-10 h-10 text-amber-500 relative z-10" />
+      <div className="max-w-md w-full relative z-10">
+        {/* Tenant Logo and Name (Header) */}
+        {tenant && (
+          <div className="flex flex-col items-center mb-6 animate-fade-in">
+            {tenant.logo_url ? (
+              <img 
+                src={tenant.logo_url} 
+                alt={tenant.name} 
+                className="h-16 w-auto object-contain mb-3 drop-shadow-glow" 
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
+            ) : (
+              <div className="w-10 h-10 bg-dark-900 border border-dark-800 rounded-xl flex items-center justify-center shadow-card mb-2">
+                <Building2 className="w-5 h-5 text-primary-400" />
+              </div>
+            )}
+            <p className="text-xs font-semibold text-dark-400 uppercase tracking-widest">
+              {tenant.name}
+            </p>
+          </div>
+        )}
+
+        {/* Card */}
+        <div 
+          className="card p-8 sm:p-10 border border-dark-800/80 bg-dark-900/40 backdrop-blur-xl relative shadow-[0_0_50px_rgba(0,0,0,0.4)] transition-all hover:border-dark-700/80 group"
+          style={{ animation: 'modalIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}
+        >
+          {/* Top dynamic ambient accent bar */}
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-500/50 via-primary-500/50 to-amber-500/50 rounded-t-2xl opacity-70" />
+
+          {/* Pulsing pause icon container */}
+          <div className="w-20 h-20 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-500/20 shadow-[0_0_30px_rgba(245,158,11,0.15)] relative group-hover:scale-105 transition-transform duration-300">
+            <div className="absolute inset-0 rounded-2xl bg-amber-500/5 animate-ping opacity-75 pointer-events-none" />
+            <Pause className="w-10 h-10 text-amber-500 relative z-10" />
+          </div>
+          
+          <h2 className="text-xl sm:text-2xl font-bold text-dark-50 mb-2 tracking-tight">
+            Anket Geçici Olarak Durduruldu
+          </h2>
+          
+          {survey.title && (
+            <p className="text-xs font-medium text-amber-400/80 bg-amber-500/5 border border-amber-500/10 rounded-lg py-1.5 px-3 inline-block mb-4 max-w-full truncate">
+              {survey.title}
+            </p>
+          )}
+
+          <p className="text-dark-300 leading-relaxed text-sm sm:text-base mb-8">
+            Bu anket yöneticiler tarafından geçici olarak yeni katılımlara kapatılmıştır.
+            Lütfen daha sonra tekrar deneyiniz. Gösterdiğiniz ilgi için teşekkür ederiz.
+          </p>
+
+          {/* Yeniden Dene Button */}
+          <button
+            onClick={handleRetry}
+            disabled={refreshing}
+            className="w-full btn-lg bg-gradient-to-r from-dark-800 to-dark-900 hover:from-dark-700 hover:to-dark-800 text-dark-100 border border-dark-700 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2.5 font-bold hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 text-primary-400 ${refreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+            {refreshing ? 'Kontrol Ediliyor...' : 'Yeniden Dene'}
+          </button>
         </div>
-        
-        <h1 className="text-2xl font-bold text-dark-50 mb-3 tracking-tight">Anket Geçici Olarak Durduruldu</h1>
-        <p className="text-dark-400 leading-relaxed text-sm sm:text-base">
-          Bu anket yöneticiler tarafından geçici olarak yeni katılımlara kapatılmıştır.
-          İlginiz için teşekkür ederiz, anket tekrar açıldığında yanıtlarınızı iletebilirsiniz.
-        </p>
       </div>
     </div>
   )

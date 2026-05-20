@@ -6,6 +6,7 @@ import { useAuthStore } from './stores/authStore'
 import PublicSurveyPage from './pages/survey/PublicSurveyPage'
 import ThankYouPage from './pages/survey/ThankYouPage'
 import NotificationContainer from './components/ui/NotificationContainer'
+import ConfirmModal from './components/ui/ConfirmModal'
 
 // Admin/Super-Admin — lazy loaded (sadece giriş yapan kullanıcılar için)
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
@@ -51,6 +52,7 @@ function App() {
   return (
     <BrowserRouter>
       <NotificationContainer />
+      <ConfirmModal />
       <ChangePasswordModal isOpen={mustChange} onClose={() => {}} forceChange={true} />
       <Suspense fallback={<PageLoader />}>
         <Routes>

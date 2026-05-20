@@ -86,20 +86,43 @@ CREATE TABLE response_answers (
 -- Yeni user eklenince profile de eklensin 
 -- (Not: Güvenlik sebebiyle trigger ile yapmak yerine backend/edge functions önerilir ama MVP için basitleştirildi)
 
--- Response oluşturulduğunda Survey tablosundaki response_count değerini 1 arttırma
-CREATE OR REPLACE FUNCTION increment_response_count()
+-- Yanıt eklendiğinde, güncellendiğinde veya silindiğinde surveys tablosundaki response_count sütununu senkronize tutma
+CREATE OR REPLACE FUNCTION sync_survey_response_count()
 RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE surveys SET response_count = response_count + 1 WHERE id = NEW.survey_id;
-  RETURN NEW;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.is_complete = true THEN
+      UPDATE surveys 
+      SET response_count = COALESCE(response_count, 0) + 1 
+      WHERE id = NEW.survey_id;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- is_complete false -> true olduysa arttır
+    IF (OLD.is_complete = false OR OLD.is_complete IS NULL) AND NEW.is_complete = true THEN
+      UPDATE surveys 
+      SET response_count = COALESCE(response_count, 0) + 1 
+      WHERE id = NEW.survey_id;
+    -- is_complete true -> false olduysa azalt
+    ELSIF OLD.is_complete = true AND (NEW.is_complete = false OR NEW.is_complete IS NULL) THEN
+      UPDATE surveys 
+      SET response_count = GREATEST(0, COALESCE(response_count, 0) - 1) 
+      WHERE id = NEW.survey_id;
+    END IF;
+  ELSIF TG_OP = 'DELETE' THEN
+    IF OLD.is_complete = true THEN
+      UPDATE surveys 
+      SET response_count = GREATEST(0, COALESCE(response_count, 0) - 1) 
+      WHERE id = OLD.survey_id;
+    END IF;
+  END IF;
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER increment_response_count_trigger
-AFTER INSERT ON responses
+CREATE TRIGGER sync_response_count_trigger
+AFTER INSERT OR UPDATE OR DELETE ON responses
 FOR EACH ROW
-WHEN (NEW.is_complete = true)
-EXECUTE FUNCTION increment_response_count();
+EXECUTE FUNCTION sync_survey_response_count();
 
 -- 3. RLS (Row Level Security) KURALLARI
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;

@@ -44,24 +44,33 @@ export default function AdminSurveyResults() {
   const [currentPage, setCurrentPage] = useState(1)
   
   const { addNotification } = useNotificationStore()
+  const { showConfirm } = useConfirmModalStore()
 
-  const handleDeleteResponse = async (responseId: string) => {
-    if (confirm('Bu yanıtı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) {
-      try {
-        const { error } = await httpFrom('responses').delete().eq('id', responseId).execute()
-        if (error) throw error
-        
-        setResponses(prev => prev.filter(res => res.id !== responseId))
-        
-        if (selectedResponse?.id === responseId) {
-          setSelectedResponse(null)
+  const handleDeleteResponse = (responseId: string) => {
+    showConfirm({
+      title: 'Yanıtı Sil',
+      message: 'Bu yanıtı kalıcı olarak silmek istediğinize emin misiniz?',
+      detail: 'Bu işlem geri alınamaz ve anket istatistikleri güncellenecektir.',
+      confirmText: 'Evet, Sil',
+      cancelText: 'Vazgeç',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const { error } = await httpFrom('responses').delete().eq('id', responseId).execute()
+          if (error) throw error
+          
+          setResponses(prev => prev.filter(res => res.id !== responseId))
+          
+          if (selectedResponse?.id === responseId) {
+            setSelectedResponse(null)
+          }
+          
+          addNotification('Yanıt başarıyla silindi.', 'success')
+        } catch (err: any) {
+          addNotification('Yanıt silinirken bir hata oluştu: ' + (err.message || ''), 'error')
         }
-        
-        addNotification('Yanıt başarıyla silindi.', 'success')
-      } catch (err: any) {
-        addNotification('Yanıt silinirken bir hata oluştu: ' + (err.message || ''), 'error')
       }
-    }
+    })
   }
 
   useEffect(() => {

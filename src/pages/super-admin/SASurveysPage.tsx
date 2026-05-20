@@ -9,6 +9,7 @@ import { slugify, generateUUID, formatDate } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useAuthStore } from '../../stores/authStore'
 import { httpFrom, httpRpc } from '../../lib/supabaseHttp'
+import { useConfirmModalStore } from '../../stores/confirmModalStore'
 
 export default function SASurveysPage() {
   const [surveys, setSurveys] = useState<any[]>([])
@@ -23,6 +24,7 @@ export default function SASurveysPage() {
   const [targetTenantId, setTargetTenantId] = useState('')
   const [cloning, setCloning] = useState(false)
   const { addNotification } = useNotificationStore()
+  const { showConfirm } = useConfirmModalStore()
 
   // Yeni Anket Oluşturma States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -159,17 +161,25 @@ export default function SASurveysPage() {
     }
   }
 
-  const handleDelete = async (id: string, title: string) => {
-    if (confirm(`'${title}' anketini MERKEZİ olarak silmek üzeresiniz. Emin misiniz?`)) {
-      try {
-        const { error } = await httpFrom('surveys').delete().eq('id', id).execute()
-        if (error) throw error
-        addNotification('Anket kalıcı olarak silindi.', 'success')
-        fetchData()
-      } catch (err: any) {
-        addNotification('Anket silinirken bir hata oluştu.', 'error')
+  const handleDelete = (id: string, title: string) => {
+    showConfirm({
+      title: 'Merkezi Anketi Sil',
+      message: `'${title}' anketini MERKEZİ olarak silmek üzeresiniz. Emin misiniz?`,
+      detail: 'Bu anket kalıcı olarak silinecek, bağlı kurum kayıtları ve tüm katılımcı yanıtları geri alınamaz şekilde kaybolacaktır.',
+      confirmText: 'Evet, Kalıcı Olarak Sil',
+      cancelText: 'Vazgeç',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const { error } = await httpFrom('surveys').delete().eq('id', id).execute()
+          if (error) throw error
+          addNotification('Anket kalıcı olarak silindi.', 'success')
+          fetchData()
+        } catch (err: any) {
+          addNotification('Anket silinirken bir hata oluştu.', 'error')
+        }
       }
-    }
+    })
   }
 
   const getStatusBadge = (status: string) => {

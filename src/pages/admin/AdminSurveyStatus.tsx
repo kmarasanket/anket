@@ -7,6 +7,7 @@ import {
 import { httpRpc, httpFrom } from '../../lib/supabaseHttp'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { useConfirmModalStore } from '../../stores/confirmModalStore'
 
 interface SurveyQuotaStatus {
   survey_id: string
@@ -26,14 +27,9 @@ interface SurveyQuotaStatus {
 export default function AdminSurveyStatus() {
   const { tenant } = useAuthStore()
   const { addNotification } = useNotificationStore()
+  const { showConfirm } = useConfirmModalStore()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<SurveyQuotaStatus[]>([])
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, surveyId: string, surveyTitle: string, currentStatus: string}>({
-    isOpen: false,
-    surveyId: '',
-    surveyTitle: '',
-    currentStatus: ''
-  })
 
   const loadQuotaStatus = async () => {
     if (!tenant?.id) return
@@ -48,7 +44,7 @@ export default function AdminSurveyStatus() {
       console.error(err)
       addNotification('Anket kota durumları yüklenemedi: ' + (err.message || ''), 'error')
     } finally {
-      setLoading(false)
+      if (loading) setLoading(false)
     }
   }
 
@@ -57,30 +53,31 @@ export default function AdminSurveyStatus() {
   }, [tenant?.id])
 
   const handleToggleStatus = (id: string, title: string, currentStatus: string) => {
-    setConfirmModal({
-      isOpen: true,
-      surveyId: id,
-      surveyTitle: title,
-      currentStatus
-    })
-  }
-
-  const executeToggleStatus = async () => {
-    const { surveyId, currentStatus } = confirmModal
     const isClosing = currentStatus === 'active'
-    try {
-      const newStatus = isClosing ? 'closed' : 'active'
-      const { error } = await httpFrom('surveys').update({ status: newStatus }).eq('id', surveyId).execute()
-      if (error) throw error
-      addNotification(
-        isClosing ? 'Anket katılıma kapatıldı.' : 'Anket katılıma açıldı.',
-        'success'
-      )
-      setConfirmModal(prev => ({ ...prev, isOpen: false }))
-      loadQuotaStatus()
-    } catch (err: any) {
-      addNotification('Anket durumu güncellenirken bir hata oluştu.', 'error')
-    }
+    showConfirm({
+      title: isClosing ? 'Anketi Durdur' : 'Anketi Başlat',
+      message: `'${title}' anketini ${isClosing ? 'duraklatmak' : 'katılıma açmak'} istediğinize emin misiniz?`,
+      detail: isClosing 
+        ? 'Anketi durdurduğunuzda katılımcılar yeni yanıt gönderemeyecektir.'
+        : 'Anketi başlattığınızda katılımcılar tekrar yanıt gönderebilecektir.',
+      confirmText: isClosing ? 'Evet, Anketi Durdur' : 'Evet, Anketi Başlat',
+      cancelText: 'Vazgeç',
+      variant: isClosing ? 'danger' : 'success',
+      onConfirm: async () => {
+        try {
+          const newStatus = isClosing ? 'closed' : 'active'
+          const { error } = await httpFrom('surveys').update({ status: newStatus }).eq('id', id).execute()
+          if (error) throw error
+          addNotification(
+            isClosing ? 'Anket katılıma kapatıldı.' : 'Anket katılıma açıldı.',
+            'success'
+          )
+          loadQuotaStatus()
+        } catch (err: any) {
+          addNotification('Anket durumu güncellenirken bir hata oluştu.', 'error')
+        }
+      }
+    })
   }
 
   const getSurveyTypeLabel = (type: string) => {
@@ -353,60 +350,6 @@ export default function AdminSurveyStatus() {
         </div>
       )}
 
-      {/* Onay Modalı */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-dark-900 border border-dark-700 w-full max-w-md rounded-2xl shadow-xl flex flex-col p-6 animate-scale-up">
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="font-semibold text-lg text-dark-100 flex items-center gap-2">
-                {confirmModal.currentStatus === 'active' ? (
-                  <>
-                    <Pause className="w-5 h-5 text-red-400 animate-pulse" />
-                    Anketi Duraklat
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5 text-emerald-400" />
-                    Anketi Başlat
-                  </>
-                )}
-              </h3>
-              <button 
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} 
-                className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-dark-300 text-sm sm:text-base leading-relaxed">
-                <span className="font-bold text-dark-50">{confirmModal.surveyTitle}</span> anketini geçici olarak katılıma kapatmak istediğinize emin misiniz?
-                {confirmModal.currentStatus === 'active' ? (
-                  ' Anketi durdurduğunuzda katılımcılar yeni yanıt gönderemeyecektir.'
-                ) : (
-                  ' Anketi başlattığınızda katılımcılar tekrar yanıt gönderebilecektir.'
-                )}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-3">
-              <button 
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} 
-                className="btn-md btn-secondary"
-              >
-                Vazgeç
-              </button>
-              <button 
-                onClick={executeToggleStatus}
-                className={`btn-md ${confirmModal.currentStatus === 'active' ? 'btn-danger bg-red-600 hover:bg-red-500' : 'btn-primary bg-emerald-600 hover:bg-emerald-500'}`}
-              >
-                {confirmModal.currentStatus === 'active' ? 'Evet, Anketi Durdur' : 'Evet, Anketi Başlat'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
