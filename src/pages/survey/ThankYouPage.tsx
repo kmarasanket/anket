@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { CheckCircle2, Home } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { CheckCircle2 } from 'lucide-react'
 import { httpFrom } from '../../lib/supabaseHttp'
 
 export default function ThankYouPage() {
@@ -18,30 +18,22 @@ export default function ThankYouPage() {
   }, [slug])
 
   return (
-    <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center animate-in">
-      <div className="card p-10 max-w-lg w-full relative overflow-hidden">
-        {/* Dekoratif Arka Plan */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-          <div className="w-64 h-64 bg-green-500 rounded-full blur-3xl"></div>
-        </div>
+    <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-6 text-center animate-in relative overflow-hidden">
+      {/* Glow background */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-green-500/5 rounded-full blur-[120px] pointer-events-none" />
 
+      <div className="card p-12 max-w-lg w-full border border-dark-800/80 bg-dark-900/40 backdrop-blur-xl relative z-10 shadow-[0_0_50px_rgba(0,0,0,0.3)]">
         <div className="relative z-10 flex flex-col items-center">
-          <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-6">
-            <CheckCircle2 className="w-10 h-10 text-green-500" />
+          <div className="w-20 h-20 bg-green-500/10 rounded-2xl flex items-center justify-center mb-8 border border-green-500/20 shadow-[0_0_30px_rgba(34,197,94,0.1)] relative">
+            <div className="absolute inset-0 rounded-2xl bg-green-500/5 animate-ping opacity-75" />
+            <CheckCircle2 className="w-10 h-10 text-green-500 relative z-10" />
           </div>
           
-          <h1 className="text-2xl font-display font-bold text-dark-50 mb-4">Yanıtınız Kaydedildi</h1>
+          <h1 className="text-2xl font-bold text-dark-50 mb-3 tracking-tight">Katılımınız İçin Teşekkür Ederiz</h1>
           
-          <p className="text-dark-300 mb-8 text-lg">
-            {survey?.thank_you_message || 'Ankete katıldığınız için teşekkür ederiz. Görüşleriniz bizim için çok değerlidir.'}
+          <p className="text-dark-300 leading-relaxed text-sm sm:text-base">
+            {survey?.thank_you_message || 'Görüşleriniz bizim için çok değerlidir. Anketi başarıyla tamamladınız.'}
           </p>
-
-          <div className="w-full h-px bg-dark-800 mb-8" />
-
-          {/* Sadece ana sayfaya dönüş değil, kurum sitesine dönüş gibi linkler eklenebilir */}
-          <Link to="/" className="text-dark-500 hover:text-dark-300 font-medium text-sm flex items-center gap-2 transition-colors">
-            <Home className="w-4 h-4" /> Anket Platformu Ana Sayfa
-          </Link>
         </div>
       </div>
     </div>
