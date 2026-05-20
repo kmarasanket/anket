@@ -61,9 +61,17 @@ export default function AdminSurveyStatus() {
   }
 
   const getPeriodLabel = (p: string) => {
+    const now = new Date()
+    const months = [
+      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
+      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+    ]
+    const currentMonth = months[now.getMonth()]
+    const currentYear = now.getFullYear()
+
     switch (p) {
-      case 'monthly': return 'Aylık'
-      case 'yearly': return 'Yıllık'
+      case 'monthly': return `Aylık (${currentMonth} ${currentYear})`
+      case 'yearly': return `Yıllık (${currentYear})`
       default: return 'Süresiz'
     }
   }
@@ -225,12 +233,18 @@ export default function AdminSurveyStatus() {
                       <p className="text-xl font-bold text-dark-100">
                         {target ? target.toLocaleString('tr-TR') : 'Sınırsız'}
                       </p>
+                      <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
+                        {survey.period_type === 'monthly' ? 'Aylık Hedef (n / 12)' : survey.period_type === 'yearly' ? 'Yıllık Hedef (n)' : 'Hedef'}
+                      </p>
                     </div>
 
                     <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
                       <p className="text-xs text-dark-500 mb-1">Mevcut Katılım</p>
                       <p className="text-xl font-bold text-primary-400">
                         {comp.toLocaleString('tr-TR')}
+                      </p>
+                      <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
+                        {survey.period_type === 'monthly' ? 'Bu Ayki Katılım' : survey.period_type === 'yearly' ? 'Bu Yılki Katılım' : 'Toplam'}
                       </p>
                     </div>
 
@@ -246,6 +260,9 @@ export default function AdminSurveyStatus() {
                         ) : (
                           'Sınırsız'
                         )}
+                      </p>
+                      <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
+                        {survey.period_type === 'monthly' ? 'Kalan / Maks (%50 Ekli)' : survey.period_type === 'yearly' ? 'Kalan / Maks (%50 Ekli)' : 'Limit'}
                       </p>
                     </div>
                   </div>
