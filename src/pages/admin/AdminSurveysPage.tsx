@@ -1,17 +1,30 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, QrCode, X, Download, Share2 } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, X, Download, Share2, TrendingUp, CheckCircle, Ban, AlertTriangle, HelpCircle } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
 import { QRCodeCanvas } from 'qrcode.react'
-import { httpFrom } from '../../lib/supabaseHttp'
+import { httpFrom, httpRpc } from '../../lib/supabaseHttp'
 import { formatDate } from '../../lib/utils'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import type { Survey } from '../../lib/database.types'
 
+interface QuotaStatus {
+  survey_id: string
+  survey_type: string
+  period_type: string
+  target_count: number | null
+  completed_count: number
+  max_allowed: number | null
+  is_blocked: boolean
+  required_sample_size: number
+  population_size: number
+}
+
 export default function AdminSurveysPage() {
   const { tenant, profile } = useAuthStore()
   const [surveys, setSurveys] = useState<any[]>([])
+  const [quotaMap, setQuotaMap] = useState<Record<string, QuotaStatus>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [shareModal, setShareModal] = useState<{isOpen: boolean, link: string, title: string}>({isOpen: false, link: '', title: ''})
@@ -21,13 +34,20 @@ export default function AdminSurveysPage() {
     if (!tenant?.id) return
     setLoading(true)
     try {
-      // ✅ N+1 Sorgu Düzeltildi: Tek API çağrısıyla tüm anketler + response_count
       const q = httpFrom('surveys').select('id,title,description,slug,status,created_at,response_count')
       q.eq('tenant_id', tenant.id)
       q.order('created_at', { ascending: false })
       const { data, error } = await q.execute()
       if (error) throw error
       setSurveys(data || [])
+
+      // Kota verilerini de çek
+      const { data: quotaData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id })
+      if (quotaData && Array.isArray(quotaData)) {
+        const map: Record<string, QuotaStatus> = {}
+        quotaData.forEach((q: QuotaStatus) => { map[q.survey_id] = q })
+        setQuotaMap(map)
+      }
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
     } finally {
@@ -112,30 +132,92 @@ export default function AdminSurveysPage() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {filtered.map(survey => (
+          {filtered.map(survey => {
+            const quota = quotaMap[survey.id]
+            const now = new Date()
+            const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
+            const periodLabel = quota?.period_type === 'monthly'
+              ? `${months[now.getMonth()]} ${now.getFullYear()}`
+              : quota?.period_type === 'yearly' ? `${now.getFullYear()} Yılı` : null
+
+            const progressPct = quota?.target_count
+              ? Math.min(Math.round((quota.completed_count / quota.target_count) * 100), 150)
+              : 0
+
+            let statusColor = 'text-blue-400'
+            let statusBg = 'bg-blue-500/10 border-blue-500/20'
+            let StatusIcon = TrendingUp
+            let statusLabel = 'Devam Ediyor'
+            if (quota?.is_blocked) {
+              statusColor = 'text-red-400'; statusBg = 'bg-red-500/10 border-red-500/20'
+              StatusIcon = Ban; statusLabel = 'Kota Doldu'
+            } else if (quota?.target_count && quota.completed_count >= quota.target_count) {
+              statusColor = 'text-emerald-400'; statusBg = 'bg-emerald-500/10 border-emerald-500/20'
+              StatusIcon = CheckCircle; statusLabel = 'Hedefe Ulaşıldı'
+            } else if (quota?.target_count && quota.completed_count >= quota.target_count * 0.8) {
+              statusColor = 'text-amber-400'; statusBg = 'bg-amber-500/10 border-amber-500/20'
+              StatusIcon = AlertTriangle; statusLabel = 'Hedefe Yakın'
+            } else if (!quota) {
+              StatusIcon = HelpCircle; statusLabel = 'Veri Yok'
+            }
+
+            return (
             <div key={survey.id} className="card p-5 hover:border-dark-700 transition-colors">
               <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                 
                 <div className="flex-1 min-w-0 overflow-hidden">
-                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 min-w-0">
                     <h3 className="text-lg font-semibold text-dark-50 truncate min-w-0 flex-1" title={survey.title}>
                       {survey.title}
                     </h3>
                     <span className="shrink-0">{getStatusBadge(survey.status)}</span>
                   </div>
-                  <p className="text-sm text-dark-400 mb-2 overflow-hidden" style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    wordBreak: 'break-word'
-                  }}>
-                    {survey.description || 'Açıklama yok'}
-                  </p>
+
+                  {/* Kota Durum Şeridi */}
+                  {quota && quota.period_type !== 'none' ? (
+                    <div className={`flex flex-wrap items-center gap-3 mb-2 px-3 py-2 rounded-xl border text-xs font-medium ${statusBg}`}>
+                      <span className={`flex items-center gap-1 ${statusColor} font-semibold`}>
+                        <StatusIcon className="w-3.5 h-3.5" />
+                        {statusLabel}
+                      </span>
+                      {periodLabel && (
+                        <span className="text-dark-400 border-l border-dark-700 pl-3">{periodLabel}</span>
+                      )}
+                      <span className="text-dark-400 border-l border-dark-700 pl-3">
+                        Hedef: <span className="text-dark-100">{quota.target_count ?? '—'}</span>
+                      </span>
+                      <span className="text-dark-400 border-l border-dark-700 pl-3">
+                        Katılım: <span className={statusColor}>{quota.completed_count}</span>
+                      </span>
+                      <span className="text-dark-400 border-l border-dark-700 pl-3">
+                        Limit: <span className="text-dark-200">{quota.max_allowed ?? '—'}</span>
+                      </span>
+                      <span className="text-dark-400 border-l border-dark-700 pl-3">
+                        İlerleme: <span className={statusColor}>%{progressPct}</span>
+                      </span>
+                      {/* Mini progress bar */}
+                      <div className="hidden sm:flex items-center gap-1.5 border-l border-dark-700 pl-3 flex-1 min-w-[80px]">
+                        <div className="relative h-1.5 bg-dark-800 rounded-full flex-1 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              quota.is_blocked ? 'bg-red-500' : quota.completed_count >= (quota.target_count ?? 0) ? 'bg-emerald-500' : 'bg-primary-500'
+                            }`}
+                            style={{ width: `${Math.min((quota.completed_count / (quota.max_allowed || 1)) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-dark-500 mb-2 px-1">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>Bu anket için kota takibi yapılmıyor (süresiz)</span>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-4 text-xs text-dark-500">
                     <span>Oluşturulma: {formatDate(survey.created_at)}</span>
                     <span className="w-1 h-1 rounded-full bg-dark-700" />
-                    <span>{survey.response_count || 0} Yanıt</span>
+                    <span>{survey.response_count || 0} Toplam Yanıt</span>
                   </div>
                 </div>
 
@@ -176,7 +258,7 @@ export default function AdminSurveysPage() {
 
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 
