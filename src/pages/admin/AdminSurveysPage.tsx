@@ -54,7 +54,7 @@ export default function AdminSurveysPage() {
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
     } finally {
-      if (loading) setLoading(false)
+      setLoading(false)
     }
   }
 

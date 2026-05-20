@@ -44,7 +44,7 @@ export default function AdminSurveyStatus() {
       console.error(err)
       addNotification('Anket kota durumları yüklenemedi: ' + (err.message || ''), 'error')
     } finally {
-      if (loading) setLoading(false)
+      setLoading(false)
     }
   }
 
