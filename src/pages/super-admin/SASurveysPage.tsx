@@ -18,6 +18,8 @@ export default function SASurveysPage() {
   const [quotaMap, setQuotaMap] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [tenantFilter, setTenantFilter] = useState('')
+  const [surveyFilter, setSurveyFilter] = useState('')
   const { profile } = useAuthStore()
   
   // Clone Modal States
@@ -64,10 +66,12 @@ export default function SASurveysPage() {
 
   useEffect(() => { fetchData() }, [])
 
-  const filtered = surveys.filter(s => 
-    s.title.toLowerCase().includes(search.toLowerCase()) ||
-    s.tenants?.name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = surveys.filter(s => {
+    const matchSearch = s.title.toLowerCase().includes(search.toLowerCase()) || s.tenants?.name?.toLowerCase().includes(search.toLowerCase())
+    const matchTenant = tenantFilter ? s.tenant_id === tenantFilter : true
+    const matchSurvey = surveyFilter ? s.title === surveyFilter : true
+    return matchSearch && matchTenant && matchSurvey
+  })
 
   const handleClone = async () => {
     if (!selectedSurvey || !targetTenantId || !profile) return
@@ -240,14 +244,43 @@ export default function SASurveysPage() {
         )}
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-        <input 
-          value={search} 
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Anket başlığı veya kurum adı ile ara..." 
-          className="input pl-10" 
-        />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="relative">
+          <select 
+            value={tenantFilter}
+            onChange={e => {
+              setTenantFilter(e.target.value)
+              setSurveyFilter('') // Kurum değiştiğinde anket filtresini sıfırla
+            }}
+            className="input w-full appearance-none bg-dark-950"
+          >
+            <option value="">Tüm Kurumlar</option>
+            {tenants.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <select 
+            value={surveyFilter}
+            onChange={e => setSurveyFilter(e.target.value)}
+            className="input w-full appearance-none bg-dark-950"
+          >
+            <option value="">Tüm Anketler</option>
+            {Array.from(new Set(surveys.filter(s => tenantFilter ? s.tenant_id === tenantFilter : true).map(s => s.title))).map((title: any, i) => (
+              <option key={i} value={title}>{title}</option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <input 
+            value={search} 
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Serbest arama..." 
+            className="input pl-10 w-full" 
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -341,7 +374,7 @@ export default function SASurveysPage() {
                     </div>
 
                     {/* Kota Durum Şeridi */}
-                    {quota && quota.period_type !== 'none' ? (
+                    {quota && (quota.target_count > 0 || quota.max_allowed > 0 || (quota.period_type && quota.period_type !== 'none')) ? (
                       <div className={`flex flex-wrap items-center gap-3 mb-2 px-3 py-2 rounded-xl border text-xs font-medium ${statusBg}`}>
                         <span className={`flex items-center gap-1 ${statusColor} font-semibold`}>
                           <StatusIcon className="w-3.5 h-3.5" />
