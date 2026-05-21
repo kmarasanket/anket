@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, ToggleLeft, ToggleRight, Building2, Users } from '
 import { supabase } from '../../lib/supabase'
 import { formatDate, slugify } from '../../lib/utils'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { useAuthStore } from '../../stores/authStore'
 import type { Tenant } from '../../lib/database.types'
 
 export default function SATenantsPage() {
