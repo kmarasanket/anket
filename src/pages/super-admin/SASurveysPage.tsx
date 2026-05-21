@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { 
   Plus, Search, Edit2, Trash2, Copy, BarChart3, 
   ExternalLink, Globe, Building2, ChevronRight, X, Check,
-  TrendingUp, CheckCircle, AlertTriangle, HelpCircle, Pause, Play
+  TrendingUp, CheckCircle, AlertTriangle, HelpCircle, Pause, Play, Target
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { slugify, generateUUID, formatDate } from '../../lib/utils'
@@ -37,13 +37,23 @@ export default function SASurveysPage() {
   const [newSurveyTenantId, setNewSurveyTenantId] = useState('')
   const [creating, setCreating] = useState(false)
 
+  // Kota Ayarları Modal States
+  const [quotaModal, setQuotaModal] = useState<{isOpen: boolean, survey: any | null}>({isOpen: false, survey: null})
+  const [quotaForm, setQuotaForm] = useState({
+    survey_type: 'diger',
+    population_size: '',
+    required_sample_size: '',
+    period_type: 'none',
+    target_count: ''
+  })
+  const [savingQuota, setSavingQuota] = useState(false)
+
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [surveysRes, tenantsRes, quotaRes] = await Promise.all([
+      const [surveysRes, tenantsRes] = await Promise.all([
         httpFrom('surveys').select('*, tenants(name)').order('created_at', { ascending: false }).execute(),
         httpFrom('tenants').select('id, name').eq('is_active', 'true').order('name').execute(),
-        httpRpc('get_tenant_survey_status')
       ])
       
       if (surveysRes.error) throw surveysRes.error
@@ -52,10 +62,16 @@ export default function SASurveysPage() {
       setSurveys(surveysRes.data || [])
       setTenants(tenantsRes.data || [])
 
-      if (quotaRes.data && Array.isArray(quotaRes.data)) {
-        const map: Record<string, any> = {}
-        quotaRes.data.forEach((q: any) => { map[q.survey_id] = q })
-        setQuotaMap(map)
+      // Kota verilerini ayrı çek — hata olsa bile anket listesi çalışmaya devam eder
+      try {
+        const quotaRes = await httpRpc('get_tenant_survey_status')
+        if (quotaRes.data && Array.isArray(quotaRes.data)) {
+          const map: Record<string, any> = {}
+          quotaRes.data.forEach((q: any) => { map[q.survey_id] = q })
+          setQuotaMap(map)
+        }
+      } catch (quotaErr: any) {
+        console.warn('Kota verileri yüklenemedi:', quotaErr.message)
       }
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu: ' + (err.message || ''), 'error')
@@ -218,6 +234,52 @@ export default function SASurveysPage() {
     })
   }
 
+  const openQuotaModal = (survey: any) => {
+    const q = quotaMap[survey.id]
+    const settings = survey.settings || {}
+    setQuotaForm({
+      survey_type: q?.survey_type || settings.survey_type || 'diger',
+      population_size: q?.population_size ? String(q.population_size) : (settings.population_size ? String(settings.population_size) : ''),
+      required_sample_size: q?.required_sample_size ? String(q.required_sample_size) : (settings.required_sample_size ? String(settings.required_sample_size) : ''),
+      period_type: q?.period_type || settings.period_type || 'none',
+      target_count: q?.target_count ? String(q.target_count) : (settings.target_count ? String(settings.target_count) : '')
+    })
+    setQuotaModal({ isOpen: true, survey })
+  }
+
+  const saveQuotaSettings = async () => {
+    if (!quotaModal.survey) return
+    setSavingQuota(true)
+    try {
+      const popSize = parseInt(quotaForm.population_size) || 0
+      const sampleSize = parseInt(quotaForm.required_sample_size) || 0
+      let targetCount: number | null = parseInt(quotaForm.target_count) || null
+      if (!targetCount && sampleSize > 0) {
+        if (quotaForm.period_type === 'monthly') targetCount = Math.ceil(sampleSize / 12)
+        else if (quotaForm.period_type === 'yearly') targetCount = sampleSize
+      }
+
+      const settings = {
+        survey_type: quotaForm.survey_type,
+        population_size: popSize,
+        required_sample_size: sampleSize,
+        period_type: quotaForm.period_type,
+        target_count: targetCount
+      }
+
+      const { error } = await httpFrom('surveys').update({ settings }).eq('id', quotaModal.survey.id).execute()
+      if (error) throw error
+
+      addNotification('Kota ayarları kaydedildi.', 'success')
+      setQuotaModal({ isOpen: false, survey: null })
+      fetchData()
+    } catch (err: any) {
+      addNotification('Kota ayarları kaydedilemedi: ' + (err.message || ''), 'error')
+    } finally {
+      setSavingQuota(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active': return <span className="badge-success">Aktif</span>
@@ -298,7 +360,35 @@ export default function SASurveysPage() {
       ) : (
         <div className="grid gap-4">
           {filtered.map(survey => {
-            const quota = quotaMap[survey.id]
+            const rpcItem = quotaMap[survey.id]
+            const settings = survey.settings || {}
+
+            const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
+            const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+            const period_type = rpcItem?.period_type || settings.period_type || 'none'
+            
+            let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+            if (!target_count && required_sample_size > 0) {
+              if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
+              else if (period_type === 'yearly') target_count = required_sample_size
+            }
+
+            const completed_count = rpcItem?.completed_count ?? survey.response_count ?? 0
+            const max_allowed = rpcItem?.max_allowed || parseInt(settings.max_allowed) || null
+            const is_blocked = rpcItem?.is_blocked || false
+            const survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+
+            const quota = {
+              survey_id: survey.id,
+              population_size,
+              required_sample_size,
+              period_type,
+              target_count,
+              completed_count,
+              max_allowed,
+              is_blocked,
+              survey_type
+            }
             const now = new Date()
             const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
             const periodLabel = quota?.period_type === 'monthly'
@@ -383,8 +473,18 @@ export default function SASurveysPage() {
                         {periodLabel && (
                           <span className="text-dark-400 border-l border-dark-700 pl-3">{periodLabel}</span>
                         )}
+                        {quota.population_size > 0 && (
+                          <span className="text-dark-400 border-l border-dark-700 pl-3">
+                            Evren (N): <span className="text-dark-100">{quota.population_size.toLocaleString('tr-TR')}</span>
+                          </span>
+                        )}
+                        {quota.required_sample_size > 0 && (
+                          <span className="text-dark-400 border-l border-dark-700 pl-3">
+                            Örneklem (n): <span className="text-dark-100">{quota.required_sample_size.toLocaleString('tr-TR')}</span>
+                          </span>
+                        )}
                         <span className="text-dark-400 border-l border-dark-700 pl-3">
-                          Hedef: <span className="text-dark-100">{quota.target_count ?? '—'}</span>
+                          Dönem Hedefi: <span className="text-dark-100">{quota.target_count ?? '—'}</span>
                         </span>
                         <span className="text-dark-400 border-l border-dark-700 pl-3">
                           Katılım: <span className={statusColor}>{quota.completed_count}</span>
@@ -411,10 +511,29 @@ export default function SASurveysPage() {
                           </div>
                         </div>
                       </div>
+                    ) : quota ? (
+                      <div className="flex items-center gap-3 flex-wrap text-xs mb-2 px-3 py-2 rounded-xl border border-dark-800/50 bg-dark-900/30">
+                        {quota.population_size > 0 && (
+                          <span className="text-dark-500">
+                            Evren (N): <span className="text-dark-300">{quota.population_size.toLocaleString('tr-TR')}</span>
+                          </span>
+                        )}
+                        {quota.required_sample_size > 0 && (
+                          <span className="text-dark-500 border-l border-dark-800 pl-3">
+                            Örneklem (n): <span className="text-dark-300">{quota.required_sample_size.toLocaleString('tr-TR')}</span>
+                          </span>
+                        )}
+                        {!quota.population_size && !quota.required_sample_size && (
+                          <>
+                            <HelpCircle className="w-3.5 h-3.5 text-dark-600" />
+                            <span className="text-dark-500">Bu anket için kota/örneklem takibi yapılmıyor</span>
+                          </>
+                        )}
+                      </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-xs text-dark-500 mb-2 px-1">
+                      <div className="flex items-center gap-2 text-xs text-dark-600 mb-2 px-1">
                         <HelpCircle className="w-3.5 h-3.5" />
-                        <span>Bu anket için kota takibi yapılmıyor (süresiz)</span>
+                        <span>Kota verisi yükleniyor...</span>
                       </div>
                     )}
 
@@ -430,13 +549,23 @@ export default function SASurveysPage() {
                   {/* Butonlar */}
                   <div className="flex items-center gap-2 w-full md:w-auto shrink-0 border-t border-dark-800 pt-4 md:border-0 md:pt-0 mt-2 md:mt-0 justify-end">
                     {profile?.role !== 'management' && (
-                      <button 
-                        onClick={() => { setSelectedSurvey(survey); setIsCloneModalOpen(true); }}
-                        className="btn-sm btn-ghost hover:bg-emerald-500/10 hover:text-emerald-400"
-                        title="Kuruma Kopyala"
-                      >
-                        <Copy className="w-4 h-4" /> <span className="hidden lg:inline">Kopyala</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openQuotaModal(survey)}
+                          className="btn-sm btn-ghost hover:bg-amber-500/10 hover:text-amber-400"
+                          title="Kota Ayarları"
+                        >
+                          <Target className="w-4 h-4" /> <span className="hidden lg:inline">Kota Ayarları</span>
+                        </button>
+
+                        <button 
+                          onClick={() => { setSelectedSurvey(survey); setIsCloneModalOpen(true); }}
+                          className="btn-sm btn-ghost hover:bg-emerald-500/10 hover:text-emerald-400"
+                          title="Kuruma Kopyala"
+                        >
+                          <Copy className="w-4 h-4" /> <span className="hidden lg:inline">Kopyala</span>
+                        </button>
+                      </>
                     )}
                     
                     <a 
@@ -600,6 +729,139 @@ export default function SASurveysPage() {
                 className="btn-md btn-primary flex-1 shadow-glow"
               >
                 {creating ? 'Oluşturuluyor...' : 'Anketi Oluştur'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kota Ayarları Modalı */}
+      {quotaModal.isOpen && quotaModal.survey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-dark-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-dark-50 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-amber-400" />
+                  Kota &amp; Örneklem Ayarları
+                </h3>
+                <p className="text-xs text-dark-500 mt-0.5 truncate max-w-xs">{quotaModal.survey.title}</p>
+              </div>
+              <button onClick={() => setQuotaModal({ isOpen: false, survey: null })} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Anket Türü */}
+              <div className="space-y-1.5">
+                <label className="label">Anket Türü</label>
+                <select
+                  value={quotaForm.survey_type}
+                  onChange={e => setQuotaForm(p => ({ ...p, survey_type: e.target.value }))}
+                  className="input w-full"
+                >
+                  <option value="ayaktan">Ayaktan Hasta (Poliklinik)</option>
+                  <option value="yatan">Yatan Hasta</option>
+                  <option value="acil">Acil Servis</option>
+                  <option value="calisan">Çalışan Geri Bildirim</option>
+                  <option value="diger">Genel / Diğer</option>
+                </select>
+              </div>
+
+              {/* Evren ve Örneklem */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="label">Evren Büyüklüğü (N)</label>
+                  <p className="text-xs text-dark-500 -mt-1">Toplam hedef kitle sayısı</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotaForm.population_size}
+                    onChange={e => setQuotaForm(p => ({ ...p, population_size: e.target.value }))}
+                    className="input"
+                    placeholder="örn. 50000"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="label">Gerekli Örneklem (n)</label>
+                  <p className="text-xs text-dark-500 -mt-1">İstatistiksel örneklem sayısı</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotaForm.required_sample_size}
+                    onChange={e => setQuotaForm(p => ({ ...p, required_sample_size: e.target.value }))}
+                    className="input"
+                    placeholder="örn. 381"
+                  />
+                </div>
+              </div>
+
+              {/* Dönem Tipi */}
+              <div className="space-y-1.5">
+                <label className="label">Dönem Tipi</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'none', label: 'Süresiz' },
+                    { value: 'monthly', label: 'Aylık' },
+                    { value: 'yearly', label: 'Yıllık' }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setQuotaForm(p => ({ ...p, period_type: opt.value }))}
+                      className={`py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                        quotaForm.period_type === opt.value
+                          ? 'bg-primary-500/20 border-primary-500/50 text-primary-300'
+                          : 'bg-dark-800 border-dark-700 text-dark-400 hover:border-dark-600'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dönem Hedefi */}
+              {quotaForm.period_type !== 'none' && (
+                <div className="space-y-1.5">
+                  <label className="label">
+                    {quotaForm.period_type === 'monthly' ? 'Aylık Hedef' : 'Yıllık Hedef'}
+                    <span className="text-dark-500 font-normal ml-1">(Boş bırakırsanız örneklemden otomatik hesaplanır)</span>
+                  </label>
+                  {quotaForm.required_sample_size && !quotaForm.target_count && (
+                    <p className="text-xs text-amber-400 bg-amber-500/10 px-2.5 py-1.5 rounded-lg">
+                      Otomatik hesap: {quotaForm.period_type === 'monthly'
+                        ? `${Math.ceil(parseInt(quotaForm.required_sample_size) / 12)} (${quotaForm.required_sample_size} / 12 ay)`
+                        : `${quotaForm.required_sample_size} (yıllık örneklem)`
+                      }
+                    </p>
+                  )}
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotaForm.target_count}
+                    onChange={e => setQuotaForm(p => ({ ...p, target_count: e.target.value }))}
+                    className="input"
+                    placeholder={quotaForm.period_type === 'monthly' ? 'örn. 32 (aylık)' : 'örn. 381 (yıllık)'}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-dark-800 flex gap-3 justify-end">
+              <button
+                onClick={() => setQuotaModal({ isOpen: false, survey: null })}
+                className="btn-md btn-secondary"
+              >
+                İptal
+              </button>
+              <button
+                onClick={saveQuotaSettings}
+                disabled={savingQuota}
+                className="btn-md btn-primary gap-2"
+              >
+                <Target className="w-4 h-4" />
+                {savingQuota ? 'Kaydediliyor...' : 'Kota Ayarlarını Kaydet'}
               </button>
             </div>
           </div>

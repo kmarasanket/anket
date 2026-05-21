@@ -15,10 +15,10 @@ export default function SAUsersPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', password: '', password_confirm: '' })
+  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'admin' as 'admin' | 'super_admin' | 'management', tenant_id: '', password: '', password_confirm: '' })
   const [showEditForm, setShowEditForm] = useState(false)
   const [editingUser, setEditingUser] = useState<ProfileWithEmail | null>(null)
-  const [editFormData, setEditFormData] = useState({ full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', email: '' })
+  const [editFormData, setEditFormData] = useState({ full_name: '', role: 'admin' as 'admin' | 'super_admin' | 'management', tenant_id: '', email: '' })
   const { addNotification } = useNotificationStore()
   const { profile } = useAuthStore()
 
@@ -224,9 +224,10 @@ export default function SAUsersPage() {
               </div>
               <div>
                 <label className="label">Rol</label>
-                <select value={formData.role} onChange={e => setFormData(p => ({ ...p, role: e.target.value as 'admin' | 'super_admin' }))}
+                <select value={formData.role} onChange={e => setFormData(p => ({ ...p, role: e.target.value as 'admin' | 'super_admin' | 'management' }))}
                   className="input">
                   <option value="admin">Kurum Admin</option>
+                  <option value="management">Yönetim (Okuma Modu)</option>
                   <option value="super_admin">Süper Admin</option>
                 </select>
               </div>
@@ -269,9 +270,10 @@ export default function SAUsersPage() {
               </div>
               <div>
                 <label className="label">Rol</label>
-                <select value={editFormData.role} onChange={e => setEditFormData(p => ({ ...p, role: e.target.value as 'admin' | 'super_admin' }))}
+                <select value={editFormData.role} onChange={e => setEditFormData(p => ({ ...p, role: e.target.value as 'admin' | 'super_admin' | 'management' }))}
                   className="input">
                   <option value="admin">Kurum Admin</option>
+                  <option value="management">Yönetim (Okuma Modu)</option>
                   <option value="super_admin">Süper Admin</option>
                 </select>
               </div>

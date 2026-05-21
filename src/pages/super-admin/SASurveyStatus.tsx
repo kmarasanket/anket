@@ -39,26 +39,70 @@ export default function SASurveyStatus() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [tenantsRes, quotaRes] = await Promise.all([
+      const [tenantsRes, surveysRes] = await Promise.all([
         httpFrom('tenants').select('id, name').eq('is_active', 'true').order('name').execute(),
-        httpRpc('get_tenant_survey_status')
+        httpFrom('surveys').select('*, tenants(name)').order('created_at', { ascending: false }).execute()
       ])
 
       if (tenantsRes.error) throw tenantsRes.error
-      if (quotaRes.error) throw quotaRes.error
-
       setTenants(tenantsRes.data || [])
-      
-      const allData = (quotaRes.data || []) as SurveyQuotaStatus[]
-      // Kuruma göre sırala
-      allData.sort((a, b) => (a.tenant_name || '').localeCompare(b.tenant_name || '', 'tr'))
-      setData(allData)
+
+      const surveysData = surveysRes.data || []
+      let allData: SurveyQuotaStatus[] = []
+
+      try {
+        const quotaRes = await httpRpc('get_tenant_survey_status')
+        if (quotaRes.data && Array.isArray(quotaRes.data)) {
+          allData = quotaRes.data as SurveyQuotaStatus[]
+        }
+      } catch (err) {
+        console.warn('RPC call failed, using client-side aggregation:', err)
+      }
+
+      // Map ve Fallback mekanizması ile RLS/eski DB şeması bağımlılığını kaldır
+      const rpcMap = new Map(allData.map(d => [d.survey_id, d]))
+
+      const mergedData: SurveyQuotaStatus[] = surveysData.map((survey: any) => {
+        const rpcItem = rpcMap.get(survey.id)
+        const settings = survey.settings || {}
+
+        const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
+        const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+        const period_type = rpcItem?.period_type || settings.period_type || 'none'
+        
+        let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+        if (!target_count && required_sample_size > 0) {
+          if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
+          else if (period_type === 'yearly') target_count = required_sample_size
+        }
+
+        return {
+          survey_id: survey.id,
+          tenant_id: survey.tenant_id,
+          tenant_name: survey.tenants?.name || 'Bilinmeyen Kurum',
+          title: survey.title,
+          slug: survey.slug,
+          status: survey.status,
+          survey_type: rpcItem?.survey_type || settings.survey_type || 'diger',
+          population_size,
+          required_sample_size,
+          period_type,
+          target_count,
+          completed_count: rpcItem?.completed_count ?? survey.response_count ?? 0,
+          max_allowed: rpcItem?.max_allowed || parseInt(settings.max_allowed) || null,
+          is_blocked: rpcItem?.is_blocked || false
+        }
+      })
+
+      mergedData.sort((a, b) => (a.tenant_name || '').localeCompare(b.tenant_name || '', 'tr'))
+      setData(mergedData)
     } catch (err: any) {
       addNotification('Veriler yüklenemedi: ' + (err.message || ''), 'error')
     } finally {
       setLoading(false)
     }
   }
+
 
   useEffect(() => { loadData() }, [])
 

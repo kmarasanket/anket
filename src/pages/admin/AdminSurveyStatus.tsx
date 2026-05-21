@@ -35,11 +35,47 @@ export default function AdminSurveyStatus() {
     if (!tenant?.id) return
     setLoading(true)
     try {
-      const { data: resData, error } = await httpRpc('get_tenant_survey_status', {
-        p_tenant_id: tenant.id
+      const [quotaRes, surveysRes] = await Promise.all([
+        httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id }),
+        httpFrom('surveys').select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: false }).execute()
+      ])
+
+      const rpcData = (quotaRes.data && Array.isArray(quotaRes.data)) ? (quotaRes.data as SurveyQuotaStatus[]) : []
+      const surveysData = surveysRes.data || []
+
+      const rpcMap = new Map(rpcData.map(d => [d.survey_id, d]))
+
+      const mergedData: SurveyQuotaStatus[] = surveysData.map((survey: any) => {
+        const rpcItem = rpcMap.get(survey.id)
+        const settings = survey.settings || {}
+
+        const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
+        const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+        const period_type = rpcItem?.period_type || settings.period_type || 'none'
+        
+        let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+        if (!target_count && required_sample_size > 0) {
+          if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
+          else if (period_type === 'yearly') target_count = required_sample_size
+        }
+
+        return {
+          survey_id: survey.id,
+          title: survey.title,
+          slug: survey.slug,
+          status: survey.status,
+          survey_type: rpcItem?.survey_type || settings.survey_type || 'diger',
+          population_size,
+          required_sample_size,
+          period_type,
+          target_count,
+          completed_count: rpcItem?.completed_count ?? survey.response_count ?? 0,
+          max_allowed: rpcItem?.max_allowed || parseInt(settings.max_allowed) || null,
+          is_blocked: rpcItem?.is_blocked || false
+        }
       })
-      if (error) throw error
-      setData(resData || [])
+
+      setData(mergedData)
     } catch (err: any) {
       console.error(err)
       addNotification('Anket kota durumları yüklenemedi: ' + (err.message || ''), 'error')

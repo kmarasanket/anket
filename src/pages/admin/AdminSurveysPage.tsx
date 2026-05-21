@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, X, Download, Share2, TrendingUp, CheckCircle, Ban, AlertTriangle, HelpCircle, Pause, Play } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Copy, BarChart3, ExternalLink, Globe, X, Download, Share2, TrendingUp, CheckCircle, Ban, AlertTriangle, HelpCircle, Pause, Play, Settings, Target } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
 import { QRCodeCanvas } from 'qrcode.react'
 import { httpFrom, httpRpc } from '../../lib/supabaseHttp'
@@ -29,6 +29,17 @@ export default function AdminSurveysPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [shareModal, setShareModal] = useState<{isOpen: boolean, link: string, title: string}>({isOpen: false, link: '', title: ''})
+
+  // Kota Ayarları Modal States
+  const [quotaModal, setQuotaModal] = useState<{isOpen: boolean, survey: any | null}>({isOpen: false, survey: null})
+  const [quotaForm, setQuotaForm] = useState({
+    survey_type: 'diger',
+    population_size: '',
+    required_sample_size: '',
+    period_type: 'none',
+    target_count: ''
+  })
+  const [savingQuota, setSavingQuota] = useState(false)
   
   const { addNotification } = useNotificationStore()
   const { showConfirm } = useConfirmModalStore()
@@ -37,19 +48,23 @@ export default function AdminSurveysPage() {
     if (!tenant?.id) return
     setLoading(true)
     try {
-      const q = httpFrom('surveys').select('id,title,description,slug,status,created_at,response_count')
+      const q = httpFrom('surveys').select('id,title,description,slug,status,created_at,response_count,settings')
       q.eq('tenant_id', tenant.id)
       q.order('created_at', { ascending: false })
       const { data, error } = await q.execute()
       if (error) throw error
       setSurveys(data || [])
 
-      // Kota verilerini de çek
-      const { data: quotaData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id })
-      if (quotaData && Array.isArray(quotaData)) {
-        const map: Record<string, QuotaStatus> = {}
-        quotaData.forEach((q: QuotaStatus) => { map[q.survey_id] = q })
-        setQuotaMap(map)
+      // Kota verilerini ayrı çek - hata olsa bile anket listesi çalışmaya devam eder
+      try {
+        const { data: quotaData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id })
+        if (quotaData && Array.isArray(quotaData)) {
+          const map: Record<string, QuotaStatus> = {}
+          quotaData.forEach((q: QuotaStatus) => { map[q.survey_id] = q })
+          setQuotaMap(map)
+        }
+      } catch (quotaErr: any) {
+        console.warn('Kota verileri yüklenemedi:', quotaErr.message)
       }
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
@@ -57,6 +72,7 @@ export default function AdminSurveysPage() {
       setLoading(false)
     }
   }
+
 
   useEffect(() => { 
     if (tenant?.id) fetchSurveys() 
@@ -122,6 +138,53 @@ export default function AdminSurveysPage() {
     })
   }
 
+  const openQuotaModal = (survey: any) => {
+    const q = quotaMap[survey.id]
+    const settings = survey.settings || {}
+    setQuotaForm({
+      survey_type: q?.survey_type || settings.survey_type || 'diger',
+      population_size: q?.population_size ? String(q.population_size) : (settings.population_size ? String(settings.population_size) : ''),
+      required_sample_size: q?.required_sample_size ? String(q.required_sample_size) : (settings.required_sample_size ? String(settings.required_sample_size) : ''),
+      period_type: q?.period_type || settings.period_type || 'none',
+      target_count: q?.target_count ? String(q.target_count) : (settings.target_count ? String(settings.target_count) : '')
+    })
+    setQuotaModal({ isOpen: true, survey })
+  }
+
+  const saveQuotaSettings = async () => {
+    if (!quotaModal.survey) return
+    setSavingQuota(true)
+    try {
+      const popSize = parseInt(quotaForm.population_size) || 0
+      const sampleSize = parseInt(quotaForm.required_sample_size) || 0
+      // target_count: eğer girilmemişse sample_size'dan otomatik hesapla
+      let targetCount: number | null = parseInt(quotaForm.target_count) || null
+      if (!targetCount && sampleSize > 0) {
+        if (quotaForm.period_type === 'monthly') targetCount = Math.ceil(sampleSize / 12)
+        else if (quotaForm.period_type === 'yearly') targetCount = sampleSize
+      }
+
+      const settings = {
+        survey_type: quotaForm.survey_type,
+        population_size: popSize,
+        required_sample_size: sampleSize,
+        period_type: quotaForm.period_type,
+        target_count: targetCount
+      }
+
+      const { error } = await httpFrom('surveys').update({ settings }).eq('id', quotaModal.survey.id).execute()
+      if (error) throw error
+
+      addNotification('Kota ayarları kaydedildi.', 'success')
+      setQuotaModal({ isOpen: false, survey: null })
+      fetchSurveys()
+    } catch (err: any) {
+      addNotification('Kota ayarları kaydedilemedi: ' + (err.message || ''), 'error')
+    } finally {
+      setSavingQuota(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active': return <span className="badge-success">Aktif</span>
@@ -172,7 +235,35 @@ export default function AdminSurveysPage() {
       ) : (
         <div className="grid gap-4">
           {filtered.map(survey => {
-            const quota = quotaMap[survey.id]
+            const rpcItem = quotaMap[survey.id]
+            const settings = survey.settings || {}
+
+            const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
+            const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+            const period_type = rpcItem?.period_type || settings.period_type || 'none'
+            
+            let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+            if (!target_count && required_sample_size > 0) {
+              if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
+              else if (period_type === 'yearly') target_count = required_sample_size
+            }
+
+            const completed_count = rpcItem?.completed_count ?? survey.response_count ?? 0
+            const max_allowed = rpcItem?.max_allowed || parseInt(settings.max_allowed) || null
+            const is_blocked = rpcItem?.is_blocked || false
+            const survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+
+            const quota = {
+              survey_id: survey.id,
+              population_size,
+              required_sample_size,
+              period_type,
+              target_count,
+              completed_count,
+              max_allowed,
+              is_blocked,
+              survey_type
+            }
             const now = new Date()
             const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
             const periodLabel = quota?.period_type === 'monthly'
@@ -281,18 +372,25 @@ export default function AdminSurveysPage() {
                   <div className="flex items-center gap-4 text-xs text-dark-500">
                     <span>Oluşturulma: {formatDate(survey.created_at)}</span>
                     <span className="w-1 h-1 rounded-full bg-dark-700" />
-                    <span>{Math.max(survey.response_count || 0, quotaMap[survey.id]?.completed_count || 0)} Toplam Yanıt</span>
+                    <span>{Math.max(survey.response_count || 0, quota.completed_count || 0)} Toplam Yanıt</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 w-full md:w-auto shrink-0 border-t border-dark-800 pt-4 md:border-0 md:pt-0 mt-2 md:mt-0">
                   
                   <button 
+                    onClick={() => openQuotaModal(survey)}
+                    className="btn-sm btn-ghost hover:bg-amber-500/10 hover:text-amber-400 flex-1 md:flex-none justify-center"
+                    title="Kota / Örneklem Ayarları"
+                  >
+                    <Target className="w-4 h-4" /> <span className="hidden md:inline">Kota</span>
+                  </button>
+
+                  <button 
                     onClick={() => handleShareClick(survey.slug, survey.title)}
                     className="btn-sm btn-ghost group relative flex-1 md:flex-none justify-center"
                   >
                     <Share2 className="w-4 h-4" />
-                    <span className="hidden md:inline md:text-xs opacity-0 group-hover:opacity-100 absolute -top-8 px-2 py-1 bg-dark-800 rounded text-dark-100 transition-opacity">Paylaş / QR</span>
                   </button>
 
                   <a 
@@ -530,6 +628,139 @@ export default function AdminSurveysPage() {
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Kota Ayarları Modalı */}
+      {quotaModal.isOpen && quotaModal.survey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-dark-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-dark-50 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-amber-400" />
+                  Kota &amp; Örneklem Ayarları
+                </h3>
+                <p className="text-xs text-dark-500 mt-0.5 truncate max-w-xs">{quotaModal.survey.title}</p>
+              </div>
+              <button onClick={() => setQuotaModal({ isOpen: false, survey: null })} className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-800 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Anket Türü */}
+              <div className="space-y-1.5">
+                <label className="label">Anket Türü</label>
+                <select
+                  value={quotaForm.survey_type}
+                  onChange={e => setQuotaForm(p => ({ ...p, survey_type: e.target.value }))}
+                  className="input w-full"
+                >
+                  <option value="ayaktan">Ayaktan Hasta (Poliklinik)</option>
+                  <option value="yatan">Yatan Hasta</option>
+                  <option value="acil">Acil Servis</option>
+                  <option value="calisan">Çalışan Geri Bildirim</option>
+                  <option value="diger">Genel / Diğer</option>
+                </select>
+              </div>
+
+              {/* Evren ve Örneklem */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="label">Evren Büyüklüğü (N)</label>
+                  <p className="text-xs text-dark-500 -mt-1">Toplam hedef kitle sayısı</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotaForm.population_size}
+                    onChange={e => setQuotaForm(p => ({ ...p, population_size: e.target.value }))}
+                    className="input"
+                    placeholder="örn. 50000"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="label">Gerekli Örneklem (n)</label>
+                  <p className="text-xs text-dark-500 -mt-1">İstatistiksel örneklem sayısı</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotaForm.required_sample_size}
+                    onChange={e => setQuotaForm(p => ({ ...p, required_sample_size: e.target.value }))}
+                    className="input"
+                    placeholder="örn. 381"
+                  />
+                </div>
+              </div>
+
+              {/* Dönem Tipi */}
+              <div className="space-y-1.5">
+                <label className="label">Dönem Tipi</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'none', label: 'Süresiz' },
+                    { value: 'monthly', label: 'Aylık' },
+                    { value: 'yearly', label: 'Yıllık' }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setQuotaForm(p => ({ ...p, period_type: opt.value }))}
+                      className={`py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                        quotaForm.period_type === opt.value
+                          ? 'bg-primary-500/20 border-primary-500/50 text-primary-300'
+                          : 'bg-dark-800 border-dark-700 text-dark-400 hover:border-dark-600'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dönem Hedefi */}
+              {quotaForm.period_type !== 'none' && (
+                <div className="space-y-1.5">
+                  <label className="label">
+                    {quotaForm.period_type === 'monthly' ? 'Aylık Hedef' : 'Yıllık Hedef'}
+                    <span className="text-dark-500 font-normal ml-1">(Boş bırakırsanız örneklemden otomatik hesaplanır)</span>
+                  </label>
+                  {quotaForm.required_sample_size && !quotaForm.target_count && (
+                    <p className="text-xs text-amber-400 bg-amber-500/10 px-2.5 py-1.5 rounded-lg">
+                      Otomatik hesap: {quotaForm.period_type === 'monthly'
+                        ? `${Math.ceil(parseInt(quotaForm.required_sample_size) / 12)} (${quotaForm.required_sample_size} / 12 ay)`
+                        : `${quotaForm.required_sample_size} (yıllık örneklem)`
+                      }
+                    </p>
+                  )}
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotaForm.target_count}
+                    onChange={e => setQuotaForm(p => ({ ...p, target_count: e.target.value }))}
+                    className="input"
+                    placeholder={quotaForm.period_type === 'monthly' ? 'örn. 32 (aylık)' : 'örn. 381 (yıllık)'}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-dark-800 flex gap-3 justify-end">
+              <button
+                onClick={() => setQuotaModal({ isOpen: false, survey: null })}
+                className="btn-md btn-secondary"
+              >
+                İptal
+              </button>
+              <button
+                onClick={saveQuotaSettings}
+                disabled={savingQuota}
+                className="btn-md btn-primary gap-2"
+              >
+                <Target className="w-4 h-4" />
+                {savingQuota ? 'Kaydediliyor...' : 'Kota Ayarlarını Kaydet'}
+              </button>
+            </div>
           </div>
         </div>
       )}
