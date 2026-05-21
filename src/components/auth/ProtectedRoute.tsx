@@ -38,11 +38,17 @@ export default function ProtectedRoute({ children, requiredRole }: Props) {
       if (profile.role === 'super_admin') {
         return <>{children}</>
       }
-      // management rolü de admin veya super_admin ekranlarına girebilir
-      if (profile.role === 'management' && roles.includes('super_admin')) {
-        return <>{children}</>
+      // management rolü super-admin paneline erişebilir (okuma modu)
+      if (profile.role === 'management') {
+        if (roles.includes('super_admin')) {
+          // /super-admin/* rotasına erişim izni ver
+          return <>{children}</>
+        }
+        // /admin/* gibi başka rotalara gelirse super-admin'e yönlendir
+        return <Navigate to="/super-admin" replace />
       }
-      return <Navigate to="/admin" replace />
+      // admin rolü yetkisiz bir rotaya gelirse login'e yönlendir
+      return <Navigate to="/login" replace />
     }
   }
 
