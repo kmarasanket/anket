@@ -9,6 +9,25 @@ import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useConfirmModalStore } from '../../stores/confirmModalStore'
 
+// Cochran formülü: n = (Z²·p·q) / e²  →  N'e göre sonlu düzeltme
+function calculateSampleSize(N: number): number {
+  if (N <= 0) return 0
+  const n0 = 384 // Z=1.96, p=0.5, e=0.05 → 384
+  if (N <= n0) return N
+  return Math.ceil(n0 / (1 + (n0 - 1) / N))
+}
+
+// Anket türüne göre kurum istatistiğinden evren büyüklüğünü getir
+function getPopulationFromTenant(survey_type: string, tenant: any): number {
+  switch (survey_type) {
+    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 0
+    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 0
+    case 'acil':    return Number(tenant?.prev_year_emergency)  || 0
+    case 'calisan': return Number(tenant?.total_staff)          || 0
+    default:        return 0
+  }
+}
+
 interface SurveyQuotaStatus {
   survey_id: string
   title: string
@@ -49,11 +68,25 @@ export default function AdminSurveyStatus() {
         const rpcItem = rpcMap.get(survey.id)
         const settings = survey.settings || {}
 
-        const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
-        const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+        // Anket türü: RPC > settings > varsayılan
+        const survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+
+        // Evren (N): RPC > manuel settings > kurum istatistiğinden (authStore.tenant)
+        const population_from_tenant = getPopulationFromTenant(survey_type, tenant)
+        const population_size =
+          rpcItem?.population_size ||
+          (settings.population_size && Number(settings.population_size) > 0 ? Number(settings.population_size) : 0) ||
+          population_from_tenant
+
+        // Örneklem (n): RPC > manuel settings > Cochran formülü
+        const required_sample_size =
+          rpcItem?.required_sample_size ||
+          (settings.required_sample_size && Number(settings.required_sample_size) > 0 ? Number(settings.required_sample_size) : 0) ||
+          (population_size > 0 ? calculateSampleSize(population_size) : 0)
+
         const period_type = rpcItem?.period_type || settings.period_type || 'none'
-        
-        let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+
+        let target_count = rpcItem?.target_count || (settings.target_count && Number(settings.target_count) > 0 ? Number(settings.target_count) : null)
         if (!target_count && required_sample_size > 0) {
           if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
           else if (period_type === 'yearly') target_count = required_sample_size
@@ -64,13 +97,13 @@ export default function AdminSurveyStatus() {
           title: survey.title,
           slug: survey.slug,
           status: survey.status,
-          survey_type: rpcItem?.survey_type || settings.survey_type || 'diger',
+          survey_type,
           population_size,
           required_sample_size,
           period_type,
           target_count,
           completed_count: rpcItem?.completed_count ?? survey.response_count ?? 0,
-          max_allowed: rpcItem?.max_allowed || parseInt(settings.max_allowed) || null,
+          max_allowed: rpcItem?.max_allowed || (settings.max_allowed ? Number(settings.max_allowed) : null),
           is_blocked: rpcItem?.is_blocked || false
         }
       })

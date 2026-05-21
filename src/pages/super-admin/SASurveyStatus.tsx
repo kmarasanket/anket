@@ -25,6 +25,25 @@ interface SurveyQuotaStatus {
   is_blocked: boolean
 }
 
+// Cochran formülü: n = (Z²·p·q) / e²  →  N'e göre sonlu düzeltme
+function calculateSampleSize(N: number): number {
+  if (N <= 0) return 0
+  const n0 = 384 // Z=1.96, p=0.5, e=0.05 → 384
+  if (N <= n0) return N
+  return Math.ceil(n0 / (1 + (n0 - 1) / N))
+}
+
+// Anket türüne göre kurum istatistiğinden evren büyüklüğünü getir
+function getPopulationFromTenant(survey_type: string, tenant: any): number {
+  switch (survey_type) {
+    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 0
+    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 0
+    case 'acil':    return Number(tenant?.prev_year_emergency)  || 0
+    case 'calisan': return Number(tenant?.total_staff)          || 0
+    default:        return 0
+  }
+}
+
 export default function SASurveyStatus() {
   const { profile } = useAuthStore()
   const { addNotification } = useNotificationStore()
@@ -41,7 +60,8 @@ export default function SASurveyStatus() {
     try {
       const [tenantsRes, surveysRes] = await Promise.all([
         httpFrom('tenants').select('id, name').eq('is_active', 'true').order('name').execute(),
-        httpFrom('surveys').select('*, tenants(name)').order('created_at', { ascending: false }).execute()
+        // Kurum istatistiklerini de çek (evren hesabı için)
+        httpFrom('surveys').select('*, tenants(name, total_staff, prev_year_outpatient, prev_year_inpatient, prev_year_emergency)').order('created_at', { ascending: false }).execute()
       ])
 
       if (tenantsRes.error) throw tenantsRes.error
@@ -59,18 +79,32 @@ export default function SASurveyStatus() {
         console.warn('RPC call failed, using client-side aggregation:', err)
       }
 
-      // Map ve Fallback mekanizması ile RLS/eski DB şeması bağımlılığını kaldır
       const rpcMap = new Map(allData.map(d => [d.survey_id, d]))
 
       const mergedData: SurveyQuotaStatus[] = surveysData.map((survey: any) => {
         const rpcItem = rpcMap.get(survey.id)
         const settings = survey.settings || {}
+        const tenantData = survey.tenants || {}
 
-        const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
-        const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+        // Anket türü: RPC > settings > varsayılan
+        const survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+
+        // Evren (N): RPC > manuel settings > kurum istatistiğinden otomatik
+        const population_from_tenant = getPopulationFromTenant(survey_type, tenantData)
+        const population_size =
+          rpcItem?.population_size ||
+          (settings.population_size && Number(settings.population_size) > 0 ? Number(settings.population_size) : 0) ||
+          population_from_tenant
+
+        // Örneklem (n): RPC > manuel settings > Cochran formülü
+        const required_sample_size =
+          rpcItem?.required_sample_size ||
+          (settings.required_sample_size && Number(settings.required_sample_size) > 0 ? Number(settings.required_sample_size) : 0) ||
+          (population_size > 0 ? calculateSampleSize(population_size) : 0)
+
         const period_type = rpcItem?.period_type || settings.period_type || 'none'
-        
-        let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+
+        let target_count = rpcItem?.target_count || (settings.target_count && Number(settings.target_count) > 0 ? Number(settings.target_count) : null)
         if (!target_count && required_sample_size > 0) {
           if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
           else if (period_type === 'yearly') target_count = required_sample_size
@@ -79,17 +113,17 @@ export default function SASurveyStatus() {
         return {
           survey_id: survey.id,
           tenant_id: survey.tenant_id,
-          tenant_name: survey.tenants?.name || 'Bilinmeyen Kurum',
+          tenant_name: tenantData.name || 'Bilinmeyen Kurum',
           title: survey.title,
           slug: survey.slug,
           status: survey.status,
-          survey_type: rpcItem?.survey_type || settings.survey_type || 'diger',
+          survey_type,
           population_size,
           required_sample_size,
           period_type,
           target_count,
           completed_count: rpcItem?.completed_count ?? survey.response_count ?? 0,
-          max_allowed: rpcItem?.max_allowed || parseInt(settings.max_allowed) || null,
+          max_allowed: rpcItem?.max_allowed || (settings.max_allowed ? Number(settings.max_allowed) : null),
           is_blocked: rpcItem?.is_blocked || false
         }
       })
