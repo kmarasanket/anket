@@ -281,7 +281,7 @@ export function httpFrom(table: string) {
   return { select, insert, upsert, update, delete: del }
 }
 
-export async function httpRpc(fnName: string, params: object) {
+export async function httpRpc(fnName: string, params: object = {}) {
   const token = getStoredToken()
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`
   const res = await fetchWithRetry(url, {

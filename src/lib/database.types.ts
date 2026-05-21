@@ -19,7 +19,7 @@ export type QuestionType =
   | 'email'       // E-posta
   | 'phone'       // Telefon
 
-export type UserRole = 'super_admin' | 'admin'
+export type UserRole = 'super_admin' | 'admin' | 'management'
 export type SurveyStatus = 'draft' | 'active' | 'closed' | 'paused'
 
 export interface Database {

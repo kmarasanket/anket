@@ -77,6 +77,8 @@ export default function SATenantsPage() {
     }
   }
 
+  const { profile } = useAuthStore()
+
   const openEdit = (tenant: Tenant) => {
     setEditItem(tenant)
     setFormData({ name: tenant.name, description: tenant.description || '' })
@@ -90,10 +92,12 @@ export default function SATenantsPage() {
           <h1 className="page-title">Kurumlar</h1>
           <p className="page-subtitle">{tenants.length} kurum kayıtlı</p>
         </div>
-        <button onClick={() => { setEditItem(null); setFormData({ name: '', description: '' }); setShowForm(true) }}
-          className="btn-md btn-primary">
-          <Plus className="w-4 h-4" /> Kurum Ekle
-        </button>
+        {profile?.role !== 'management' && (
+          <button onClick={() => { setEditItem(null); setFormData({ name: '', description: '' }); setShowForm(true) }}
+            className="btn-md btn-primary">
+            <Plus className="w-4 h-4" /> Kurum Ekle
+          </button>
+        )}
       </div>
 
       {/* Arama */}
@@ -161,12 +165,16 @@ export default function SATenantsPage() {
                 <span className={tenant.is_active ? 'badge-success' : 'badge-neutral'}>
                   {tenant.is_active ? 'Aktif' : 'Pasif'}
                 </span>
-                <button onClick={() => openEdit(tenant)} className="btn-sm btn-ghost">
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => toggleActive(tenant)} className="btn-sm btn-ghost">
-                  {tenant.is_active ? <ToggleRight className="w-4 h-4 text-secondary-400" /> : <ToggleLeft className="w-4 h-4 text-dark-500" />}
-                </button>
+                {profile?.role !== 'management' && (
+                  <>
+                    <button onClick={() => openEdit(tenant)} className="btn-sm btn-ghost">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => toggleActive(tenant)} className="btn-sm btn-ghost">
+                      {tenant.is_active ? <ToggleRight className="w-4 h-4 text-secondary-400" /> : <ToggleLeft className="w-4 h-4 text-dark-500" />}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}

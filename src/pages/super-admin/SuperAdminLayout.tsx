@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, BarChart3,
-  LogOut, Settings, ChevronRight, Shield, Key
+  LogOut, Settings, ChevronRight, Shield, Key, ClipboardCheck
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
@@ -14,6 +14,7 @@ import SATenantsPage from './SATenantsPage'
 import SAUsersPage from './SAUsersPage'
 import SAReportsPage from './SAReportsPage'
 import SASurveysPage from './SASurveysPage'
+import SASurveyStatus from './SASurveyStatus'
 import AdminSurveyBuilder from '../admin/AdminSurveyBuilder'
 import AdminSurveyResults from '../admin/AdminSurveyResults'
 
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/super-admin',          icon: LayoutDashboard, label: 'Dashboard',   end: true },
   { to: '/super-admin/kurumlar', icon: Building2,        label: 'Kurumlar'            },
   { to: '/super-admin/anketler', icon: BarChart3,        label: 'Anketler'            },
+  { to: '/super-admin/kota',     icon: ClipboardCheck,   label: 'Kota Takibi'         },
   { to: '/super-admin/kullanicilar', icon: Users,        label: 'Kullanıcılar'        },
   { to: '/super-admin/raporlar', icon: BarChart3,        label: 'Raporlar'            },
 ]
@@ -41,7 +43,9 @@ export default function SuperAdminLayout() {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-display font-bold text-dark-50 truncate">AnketPlatform</p>
-              <p className="text-[10px] text-primary-400 font-medium">SÜPER ADMİN</p>
+              <p className={cn("text-[10px] font-medium", profile?.role === 'management' ? "text-amber-400" : "text-primary-400")}>
+                {profile?.role === 'management' ? 'YÖNETİM (Sadece Okuma)' : 'SÜPER ADMİN'}
+              </p>
             </div>
           </div>
         </div>
@@ -70,7 +74,9 @@ export default function SuperAdminLayout() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-dark-200 truncate">{profile?.full_name}</p>
-              <p className="text-[10px] text-dark-500">Süper Admin</p>
+              <p className="text-[10px] text-dark-500">
+                {profile?.role === 'management' ? 'Yönetim' : 'Süper Admin'}
+              </p>
             </div>
           </div>
           <button 
@@ -102,6 +108,7 @@ export default function SuperAdminLayout() {
             <Route index element={<SADashboard />} />
             <Route path="kurumlar" element={<SATenantsPage />} />
             <Route path="anketler" element={<SASurveysPage />} />
+            <Route path="kota" element={<SASurveyStatus />} />
             <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
             <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
             <Route path="kullanicilar" element={<SAUsersPage />} />

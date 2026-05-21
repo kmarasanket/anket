@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Plus, Search, Edit2, Trash2, Copy, BarChart3, 
-  ExternalLink, Globe, Building2, ChevronRight, X, Check
+  ExternalLink, Globe, Building2, ChevronRight, X, Check,
+  TrendingUp, CheckCircle, AlertTriangle, HelpCircle, Pause, Play
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { slugify, generateUUID, formatDate } from '../../lib/utils'
@@ -14,6 +15,7 @@ import { useConfirmModalStore } from '../../stores/confirmModalStore'
 export default function SASurveysPage() {
   const [surveys, setSurveys] = useState<any[]>([])
   const [tenants, setTenants] = useState<any[]>([])
+  const [quotaMap, setQuotaMap] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const { profile } = useAuthStore()
@@ -36,9 +38,10 @@ export default function SASurveysPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [surveysRes, tenantsRes] = await Promise.all([
+      const [surveysRes, tenantsRes, quotaRes] = await Promise.all([
         httpFrom('surveys').select('*, tenants(name)').order('created_at', { ascending: false }).execute(),
-        httpFrom('tenants').select('id, name').eq('is_active', 'true').order('name').execute()
+        httpFrom('tenants').select('id, name').eq('is_active', 'true').order('name').execute(),
+        httpRpc('get_tenant_survey_status')
       ])
       
       if (surveysRes.error) throw surveysRes.error
@@ -46,6 +49,12 @@ export default function SASurveysPage() {
 
       setSurveys(surveysRes.data || [])
       setTenants(tenantsRes.data || [])
+
+      if (quotaRes.data && Array.isArray(quotaRes.data)) {
+        const map: Record<string, any> = {}
+        quotaRes.data.forEach((q: any) => { map[q.survey_id] = q })
+        setQuotaMap(map)
+      }
     } catch (err: any) {
       addNotification('Anketler yüklenirken bir hata oluştu: ' + (err.message || ''), 'error')
     } finally {
@@ -182,6 +191,29 @@ export default function SASurveysPage() {
     })
   }
 
+  const handleToggleStatus = (id: string, title: string, currentStatus: string) => {
+    if (profile?.role === 'management') return
+    const isClosing = currentStatus === 'active'
+    showConfirm({
+      title: isClosing ? 'Anketi Durdur' : 'Anketi Başlat',
+      message: `'${title}' anketini ${isClosing ? 'duraklatmak' : 'katılıma açmak'} istediğinize emin misiniz?`,
+      confirmText: isClosing ? 'Evet, Durdur' : 'Evet, Başlat',
+      cancelText: 'Vazgeç',
+      variant: isClosing ? 'danger' : 'success',
+      onConfirm: async () => {
+        try {
+          const newStatus = isClosing ? 'closed' : 'active'
+          const { error } = await httpFrom('surveys').update({ status: newStatus }).eq('id', id).execute()
+          if (error) throw error
+          addNotification(isClosing ? 'Anket durduruldu.' : 'Anket başlatıldı.', 'success')
+          fetchData()
+        } catch (err: any) {
+          addNotification('Durum güncellenirken hata oluştu.', 'error')
+        }
+      }
+    })
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active': return <span className="badge-success">Aktif</span>
@@ -198,12 +230,14 @@ export default function SASurveysPage() {
           <h1 className="page-title">Merkezi Anket Yönetimi</h1>
           <p className="page-subtitle">Tüm kurumlara ait toplam {surveys.length} anket bulunuyor</p>
         </div>
-        <button 
-          onClick={() => setIsCreateModalOpen(true)} 
-          className="btn-md btn-primary"
-        >
-          <Plus className="w-4 h-4" /> Yeni Anket Ekle
-        </button>
+        {profile?.role !== 'management' && (
+          <button 
+            onClick={() => setIsCreateModalOpen(true)} 
+            className="btn-md btn-primary"
+          >
+            <Plus className="w-4 h-4" /> Yeni Anket Ekle
+          </button>
+        )}
       </div>
 
       <div className="relative">
@@ -217,63 +251,178 @@ export default function SASurveysPage() {
       </div>
 
       {loading ? (
-        <div className="card p-12 text-center text-dark-400">Anketler yükleniyor...</div>
+        <div className="space-y-4">
+          {Array.from({length: 3}).map((_, i) => <div key={i} className="card p-5 h-24 animate-pulse bg-dark-800/50" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="card p-16 text-center">
+          <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Globe className="w-8 h-8 text-dark-500" />
+          </div>
+          <h3 className="text-lg font-bold text-dark-100 mb-1">Anket Bulunamadı</h3>
+          <p className="text-dark-400 mb-6">Arama kriterlerinize uygun anket yok veya hiç anket oluşturulmadı.</p>
+        </div>
       ) : (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-dark-900 border-b border-dark-800 text-dark-400">
-                  <th className="px-6 py-4 font-semibold uppercase tracking-wider">Kurum</th>
-                  <th className="px-6 py-4 font-semibold uppercase tracking-wider">Anket Başlığı</th>
-                  <th className="px-6 py-4 font-semibold uppercase tracking-wider">Durum / Tarih</th>
-                  <th className="px-6 py-4 text-right">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dark-800">
-                {filtered.map(survey => (
-                  <tr key={survey.id} className="hover:bg-dark-800/50 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-primary-400" />
-                        <span className="font-medium text-dark-200">{survey.tenants?.name}</span>
+        <div className="grid gap-4">
+          {filtered.map(survey => {
+            const quota = quotaMap[survey.id]
+            const now = new Date()
+            const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
+            const periodLabel = quota?.period_type === 'monthly'
+              ? `${months[now.getMonth()]} ${now.getFullYear()}`
+              : quota?.period_type === 'yearly' ? `${now.getFullYear()} Yılı` : null
+
+            const progressPct = quota?.target_count
+              ? Math.round((quota.completed_count / quota.target_count) * 100)
+              : 0
+
+            let statusColor = 'text-blue-400'
+            let statusBg = 'bg-blue-500/10 border-blue-500/20'
+            let StatusIcon = TrendingUp
+            let statusLabel = 'Devam Ediyor'
+            
+            if (quota?.target_count && quota.completed_count >= quota.target_count) {
+              statusColor = 'text-emerald-400'; statusBg = 'bg-emerald-500/10 border-emerald-500/20'
+              StatusIcon = CheckCircle; statusLabel = quota.completed_count > quota.target_count ? `Hedef Aşıldı` : 'Hedefe Ulaşıldı'
+            } else if (quota?.target_count && quota.completed_count >= quota.target_count * 0.8) {
+              statusColor = 'text-amber-400'; statusBg = 'bg-amber-500/10 border-amber-500/20'
+              StatusIcon = AlertTriangle; statusLabel = 'Hedefe Yakın'
+            } else if (!quota) {
+              StatusIcon = HelpCircle; statusLabel = 'Veri Yok'
+            }
+
+            return (
+              <div key={survey.id} className="card p-5 hover:border-dark-700 transition-colors">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    
+                    {/* Kurum ve Başlık */}
+                    <div className="flex flex-col gap-1 mb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full self-start">
+                        <Building2 className="w-3 h-3 text-amber-400" />
+                        {survey.tenants?.name}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 min-w-[200px]">
-                      <p className="text-dark-50 font-semibold mb-0.5">{survey.title}</p>
-                      <p className="text-xs text-dark-500 truncate w-48">{survey.slug}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1.5">
-                        {getStatusBadge(survey.status)}
-                        <span className="text-[10px] text-dark-500">{formatDate(survey.created_at)}</span>
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        <h3 className="text-lg font-semibold text-dark-50 truncate min-w-0" title={survey.title}>
+                          {survey.title}
+                        </h3>
+                        <span className="shrink-0">{getStatusBadge(survey.status)}</span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => { setSelectedSurvey(survey); setIsCloneModalOpen(true); }}
-                          className="btn-sm btn-ghost hover:bg-emerald-500/10 hover:text-emerald-400"
-                          title="Kuruma Kopyala"
+                    </div>
+
+                    {/* Katılımı Durdur / Başlat Butonu */}
+                    <div className="mb-3">
+                      {profile?.role !== 'management' ? (
+                        <button
+                          onClick={() => handleToggleStatus(survey.id, survey.title, survey.status)}
+                          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                            survey.status === 'active'
+                              ? 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
+                              : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
+                          }`}
                         >
-                          <Copy className="w-4 h-4" /> <span className="hidden lg:inline">Kopyala</span>
+                          {survey.status === 'active' ? (
+                            <>
+                              <Pause className="w-3.5 h-3.5" />
+                              Anketi Durdur
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-3.5 h-3.5" />
+                              Anketi Başlat
+                            </>
+                          )}
                         </button>
-                        
-                        <a 
-                          href={`/s/${survey.slug}`} target="_blank" rel="noreferrer"
-                          className="btn-sm btn-ghost" title="Görüntüle"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
+                      ) : (
+                        <span className="text-[10px] text-dark-500 font-semibold px-2 py-1 bg-dark-800/40 rounded border border-dark-700/30">
+                          Sadece Okuma Modu
+                        </span>
+                      )}
+                    </div>
 
-                        <Link 
-                          to={`/super-admin/anketler/${survey.id}/sonuclar`}
-                          className="btn-sm btn-ghost hover:bg-purple-500/10 hover:text-purple-400"
-                          title="Sonuçlar"
-                        >
-                          <BarChart3 className="w-4 h-4" /> <span className="hidden lg:inline">Sonuçlar</span>
-                        </Link>
+                    {/* Kota Durum Şeridi */}
+                    {quota && quota.period_type !== 'none' ? (
+                      <div className={`flex flex-wrap items-center gap-3 mb-2 px-3 py-2 rounded-xl border text-xs font-medium ${statusBg}`}>
+                        <span className={`flex items-center gap-1 ${statusColor} font-semibold`}>
+                          <StatusIcon className="w-3.5 h-3.5" />
+                          {statusLabel}
+                        </span>
+                        {periodLabel && (
+                          <span className="text-dark-400 border-l border-dark-700 pl-3">{periodLabel}</span>
+                        )}
+                        <span className="text-dark-400 border-l border-dark-700 pl-3">
+                          Hedef: <span className="text-dark-100">{quota.target_count ?? '—'}</span>
+                        </span>
+                        <span className="text-dark-400 border-l border-dark-700 pl-3">
+                          Katılım: <span className={statusColor}>{quota.completed_count}</span>
+                        </span>
+                        <span className="text-dark-400 border-l border-dark-700 pl-3">
+                          {quota.completed_count >= (quota.target_count ?? 0) ? (
+                            <>Kota Aşımı: <span className="text-emerald-400 font-bold">+{quota.completed_count - (quota.target_count ?? 0)}</span></>
+                          ) : (
+                            <>Kalan: <span className="text-dark-200">{(quota.target_count ?? 0) - quota.completed_count}</span></>
+                          )}
+                        </span>
+                        <span className="text-dark-400 border-l border-dark-700 pl-3">
+                          İlerleme: <span className={statusColor}>%{progressPct}</span>
+                        </span>
+                        {/* Mini progress bar */}
+                        <div className="hidden sm:flex items-center gap-1.5 border-l border-dark-700 pl-3 flex-1 min-w-[80px]">
+                          <div className="relative h-1.5 bg-dark-800 rounded-full flex-1 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                quota.completed_count >= (quota.target_count ?? 0) ? 'bg-emerald-500' : 'bg-primary-500'
+                              }`}
+                              style={{ width: `${Math.min((quota.completed_count / (quota.target_count || 1)) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs text-dark-500 mb-2 px-1">
+                        <HelpCircle className="w-3.5 h-3.5" />
+                        <span>Bu anket için kota takibi yapılmıyor (süresiz)</span>
+                      </div>
+                    )}
 
+                    <div className="flex items-center gap-4 text-xs text-dark-500">
+                      <span>Oluşturulma: {formatDate(survey.created_at)}</span>
+                      <span className="w-1 h-1 rounded-full bg-dark-700" />
+                      <span>{Math.max(survey.response_count || 0, quota?.completed_count || 0)} Toplam Yanıt</span>
+                      <span className="w-1 h-1 rounded-full bg-dark-700" />
+                      <span className="truncate max-w-[200px]" title={survey.slug}>{survey.slug}</span>
+                    </div>
+                  </div>
+
+                  {/* Butonlar */}
+                  <div className="flex items-center gap-2 w-full md:w-auto shrink-0 border-t border-dark-800 pt-4 md:border-0 md:pt-0 mt-2 md:mt-0 justify-end">
+                    {profile?.role !== 'management' && (
+                      <button 
+                        onClick={() => { setSelectedSurvey(survey); setIsCloneModalOpen(true); }}
+                        className="btn-sm btn-ghost hover:bg-emerald-500/10 hover:text-emerald-400"
+                        title="Kuruma Kopyala"
+                      >
+                        <Copy className="w-4 h-4" /> <span className="hidden lg:inline">Kopyala</span>
+                      </button>
+                    )}
+                    
+                    <a 
+                      href={`/s/${survey.slug}`} target="_blank" rel="noreferrer"
+                      className="btn-sm btn-ghost" title="Görüntüle"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+
+                    <Link 
+                      to={`/super-admin/anketler/${survey.id}/sonuclar`}
+                      className="btn-sm btn-ghost hover:bg-purple-500/10 hover:text-purple-400"
+                      title="Sonuçlar"
+                    >
+                      <BarChart3 className="w-4 h-4" /> <span className="hidden lg:inline">Sonuçlar</span>
+                    </Link>
+
+                    {profile?.role !== 'management' && (
+                      <>
                         <div className="w-px h-4 bg-dark-800 mx-1" />
 
                         <Link 
@@ -291,13 +440,14 @@ export default function SASurveysPage() {
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 

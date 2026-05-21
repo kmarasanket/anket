@@ -11,7 +11,7 @@ CREATE TABLE tenants (
   updated_at timestamp with time zone DEFAULT now()
 );
 
-CREATE TYPE user_role AS ENUM ('super_admin', 'admin');
+CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'management');
 
 CREATE TABLE profiles (
   id uuid REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
@@ -137,16 +137,24 @@ CREATE OR REPLACE FUNCTION is_super_admin() RETURNS BOOLEAN AS $$
   SELECT EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'super_admin');
 $$ LANGUAGE sql SECURITY DEFINER;
 
+-- Yönetim (Sadece Okuma):
+CREATE OR REPLACE FUNCTION is_management() RETURNS BOOLEAN AS $$
+  SELECT EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'management');
+$$ LANGUAGE sql SECURITY DEFINER;
+
 -- Profil okuma: Kullanıcının sadece kendi profilini veya adminse tenantındaki profilleri görmesi (Super Admin hariç tutmak için is_super_admin function'ını kullanabilirsiniz)
 CREATE POLICY "Super admin all access profiles" ON profiles FOR ALL USING (is_super_admin());
+CREATE POLICY "Management can read all profiles" ON profiles FOR SELECT USING (is_management());
 CREATE POLICY "User can read own profile" ON profiles FOR SELECT USING (id = auth.uid());
 
 -- Tenant (Kurum) okuma
 CREATE POLICY "Super admin all access tenants" ON tenants FOR ALL USING (is_super_admin());
+CREATE POLICY "Management can read all tenants" ON tenants FOR SELECT USING (is_management());
 CREATE POLICY "Public can view active tenants for logos" ON tenants FOR SELECT USING (is_active = true);
 
 -- Survey okuma ve yazma (Tenant İzolasyonunun En Önemli Kısmı)
 CREATE POLICY "Public can view active surveys" ON surveys FOR SELECT USING (status = 'active');
+CREATE POLICY "Management can read all surveys" ON surveys FOR SELECT USING (is_management());
 CREATE POLICY "Admin manages its own surveys" ON surveys FOR ALL 
 USING (
   tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()) 
@@ -157,6 +165,7 @@ USING (
 CREATE POLICY "Public can view active survey questions" ON questions FOR SELECT USING (
   survey_id IN (SELECT id FROM surveys WHERE status = 'active')
 );
+CREATE POLICY "Management can read all questions" ON questions FOR SELECT USING (is_management());
 CREATE POLICY "Admin manages its own questions" ON questions FOR ALL 
 USING (
   survey_id IN (SELECT id FROM surveys WHERE tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()))
@@ -166,6 +175,7 @@ USING (
 -- Responses (Yanıtlar)
 -- Herkes yanıt ekleyebilir (Anonim anket ekleme açıksa auth kontrolüne gerek yok)
 CREATE POLICY "Public can insert responses" ON responses FOR INSERT WITH CHECK (true);
+CREATE POLICY "Management can read all responses" ON responses FOR SELECT USING (is_management());
 -- Sadece o kurumun admini veya Super admin cevapları okuyabilir
 CREATE POLICY "Admin can view responses" ON responses FOR SELECT USING (
   tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()) OR is_super_admin()
@@ -173,6 +183,7 @@ CREATE POLICY "Admin can view responses" ON responses FOR SELECT USING (
 
 -- Response Answers (Yanıt detayları)
 CREATE POLICY "Public can insert answers" ON response_answers FOR INSERT WITH CHECK (true);
+CREATE POLICY "Management can read all answers" ON response_answers FOR SELECT USING (is_management());
 CREATE POLICY "Admin can view answers" ON response_answers FOR SELECT USING (
   response_id IN (
     SELECT id FROM responses WHERE tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid())

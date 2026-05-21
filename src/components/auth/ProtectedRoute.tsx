@@ -4,7 +4,7 @@ import type { UserRole } from '../../lib/database.types'
 
 interface Props {
   children: React.ReactNode
-  requiredRole?: UserRole
+  requiredRole?: UserRole | UserRole[]
 }
 
 export default function ProtectedRoute({ children, requiredRole }: Props) {
@@ -31,12 +31,19 @@ export default function ProtectedRoute({ children, requiredRole }: Props) {
   }
 
   // Rol kontrolü
-  if (requiredRole && profile.role !== requiredRole) {
-    // Super admin her yere girebilir
-    if (profile.role === 'super_admin') {
-      return <>{children}</>
+  if (requiredRole) {
+    const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
+    if (!roles.includes(profile.role)) {
+      // Super admin her yere girebilir
+      if (profile.role === 'super_admin') {
+        return <>{children}</>
+      }
+      // management rolü de admin veya super_admin ekranlarına girebilir
+      if (profile.role === 'management' && roles.includes('super_admin')) {
+        return <>{children}</>
+      }
+      return <Navigate to="/admin" replace />
     }
-    return <Navigate to="/admin" replace />
   }
 
   return <>{children}</>

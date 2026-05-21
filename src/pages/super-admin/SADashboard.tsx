@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Building2, Users, FileText, BarChart3, TrendingUp, Activity } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatDate } from '../../lib/utils'
+import { useAuthStore } from '../../stores/authStore'
 
 interface Stats {
   tenantCount: number
@@ -13,6 +14,7 @@ interface Stats {
 export default function SADashboard() {
   const [stats, setStats] = useState<Stats>({ tenantCount: 0, userCount: 0, surveyCount: 0, responseCount: 0 })
   const [loading, setLoading] = useState(true)
+  const { profile } = useAuthStore()
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -28,7 +30,7 @@ export default function SADashboard() {
         surveyCount: surveys.count || 0,
         responseCount: responses.count || 0,
       })
-      setLoading(false)
+      loading && setLoading(false)
     }
     fetchStats()
   }, [])
@@ -39,6 +41,18 @@ export default function SADashboard() {
     { label: 'Toplam Anket', value: stats.surveyCount, icon: FileText, color: 'from-accent-600 to-accent-400', bg: 'bg-accent-500/10' },
     { label: 'Tamamlanan Yanıt', value: stats.responseCount, icon: BarChart3, color: 'from-purple-600 to-purple-400', bg: 'bg-purple-500/10' },
   ]
+
+  const quickLinks = profile?.role === 'management'
+    ? [
+        { label: 'Kota Takibi', href: '/super-admin/kota', icon: '📈' },
+        { label: 'Kurum Listesi', href: '/super-admin/kurumlar', icon: '🏢' },
+        { label: 'Genel Raporlar', href: '/super-admin/raporlar', icon: '📊' },
+      ]
+    : [
+        { label: 'Yeni Kurum Ekle', href: '/super-admin/kurumlar', icon: '🏢' },
+        { label: 'Kullanıcı Yönetimi', href: '/super-admin/kullanicilar', icon: '👥' },
+        { label: 'Genel Raporlar', href: '/super-admin/raporlar', icon: '📊' },
+      ]
 
   return (
     <div className="animate-in space-y-8">
@@ -101,11 +115,7 @@ export default function SADashboard() {
             <h3 className="font-semibold text-dark-100">Hızlı Erişim</h3>
           </div>
           <div className="space-y-2">
-            {[
-              { label: 'Yeni Kurum Ekle', href: '/super-admin/kurumlar', icon: '🏢' },
-              { label: 'Kullanıcı Yönetimi', href: '/super-admin/kullanicilar', icon: '👥' },
-              { label: 'Genel Raporlar', href: '/super-admin/raporlar', icon: '📊' },
-            ].map(({ label, href, icon }) => (
+            {quickLinks.map(({ label, href, icon }) => (
               <a
                 key={label}
                 href={href}

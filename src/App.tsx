@@ -87,7 +87,7 @@ function App() {
 function RootRedirect() {
   const { profile } = useAuthStore()
   if (!profile) return <Navigate to="/login" replace />
-  if (profile.role === 'super_admin') return <Navigate to="/super-admin" replace />
+  if (profile.role === 'super_admin' || profile.role === 'management') return <Navigate to="/super-admin" replace />
   return <Navigate to="/admin" replace />
 }
 

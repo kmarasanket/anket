@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Search, ToggleLeft, ToggleRight, Users, Edit2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { useAuthStore } from '../../stores/authStore'
 import type { Profile, Tenant } from '../../lib/database.types'
 import { validatePassword } from '../../lib/utils'
 
@@ -19,6 +20,7 @@ export default function SAUsersPage() {
   const [editingUser, setEditingUser] = useState<ProfileWithEmail | null>(null)
   const [editFormData, setEditFormData] = useState({ full_name: '', role: 'admin' as 'admin' | 'super_admin', tenant_id: '', email: '' })
   const { addNotification } = useNotificationStore()
+  const { profile } = useAuthStore()
 
   const fetchData = async () => {
     try {
@@ -182,9 +184,11 @@ export default function SAUsersPage() {
           <h1 className="page-title">Kullanıcılar</h1>
           <p className="page-subtitle">{users.length} kullanıcı kayıtlı</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-md btn-primary">
-          <Plus className="w-4 h-4" /> Kullanıcı Ekle
-        </button>
+        {profile?.role !== 'management' && (
+          <button onClick={() => setShowForm(true)} className="btn-md btn-primary">
+            <Plus className="w-4 h-4" /> Kullanıcı Ekle
+          </button>
+        )}
       </div>
 
       <div className="relative">
@@ -317,18 +321,22 @@ export default function SAUsersPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={user.role === 'super_admin' ? 'badge-primary' : 'badge-neutral'}>
-                  {user.role === 'super_admin' ? 'Süper Admin' : 'Kurum Admin'}
+                <span className={user.role === 'super_admin' ? 'badge-primary' : user.role === 'management' ? 'badge-warning' : 'badge-neutral'}>
+                  {user.role === 'super_admin' ? 'Süper Admin' : user.role === 'management' ? 'Yönetim' : 'Kurum Admin'}
                 </span>
                 <span className={user.is_active ? 'badge-success' : 'badge-danger'}>
                   {user.is_active ? 'Aktif' : 'Pasif'}
                 </span>
-                <button onClick={() => handleEditClick(user)} className="btn-sm btn-ghost" title="Düzenle">
-                  <Edit2 className="w-4 h-4 text-blue-400" />
-                </button>
-                <button onClick={() => toggleActive(user)} className="btn-sm btn-ghost" title={user.is_active ? 'Pasife Al' : 'Aktifleştir'}>
-                  {user.is_active ? <ToggleRight className="w-4 h-4 text-secondary-400" /> : <ToggleLeft className="w-4 h-4 text-dark-500" />}
-                </button>
+                {profile?.role !== 'management' && (
+                  <>
+                    <button onClick={() => handleEditClick(user)} className="btn-sm btn-ghost" title="Düzenle">
+                      <Edit2 className="w-4 h-4 text-blue-400" />
+                    </button>
+                    <button onClick={() => toggleActive(user)} className="btn-sm btn-ghost" title={user.is_active ? 'Pasife Al' : 'Aktifleştir'}>
+                      {user.is_active ? <ToggleRight className="w-4 h-4 text-secondary-400" /> : <ToggleLeft className="w-4 h-4 text-dark-500" />}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
