@@ -17,6 +17,8 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 // Guards
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
+import ChangePasswordModal from './components/auth/ChangePasswordModal'
+
 // Lazy loading için minimal yükleniyor ekranı
 function PageLoader() {
   return (
@@ -26,8 +28,6 @@ function PageLoader() {
   )
 }
 
-
-import ChangePasswordModal from './components/auth/ChangePasswordModal'
 
 function App() {
   const { initialize, initialized, user } = useAuthStore()
