@@ -32,7 +32,9 @@ export default function SASurveyStatus() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<SurveyQuotaStatus[]>([])
   const [tenants, setTenants] = useState<any[]>([])
-  const [selectedTenant, setSelectedTenant] = useState<string>('all')
+  const [selectedTenant, setSelectedTenant] = useState<string>('')
+  const [selectedSurvey, setSelectedSurvey] = useState<string>('')
+  const [search, setSearch] = useState<string>('')
 
   const loadData = async () => {
     setLoading(true)
@@ -103,9 +105,12 @@ export default function SASurveyStatus() {
     }
   }
 
-  const filteredData = selectedTenant === 'all'
-    ? data
-    : data.filter(s => s.tenant_id === selectedTenant)
+  const filteredData = data.filter(s => {
+    const matchSearch = search ? s.title.toLowerCase().includes(search.toLowerCase()) || (s.tenant_name || '').toLowerCase().includes(search.toLowerCase()) : true
+    const matchTenant = selectedTenant ? s.tenant_id === selectedTenant : true
+    const matchSurvey = selectedSurvey ? s.title === selectedSurvey : true
+    return matchSearch && matchTenant && matchSurvey
+  })
 
   // Özet istatistikler
   const totalActive = filteredData.filter(s => s.status === 'active').length
@@ -154,27 +159,42 @@ export default function SASurveyStatus() {
         </button>
       </div>
 
-      {/* Kurum Filtresi */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs text-dark-400 font-medium">Kurum Filtrele:</span>
-        <button
-          onClick={() => setSelectedTenant('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${selectedTenant === 'all' ? 'bg-primary-500 text-white' : 'bg-dark-800 text-dark-300 hover:bg-dark-700'}`}
-        >
-          Tümü ({data.length})
-        </button>
-        {tenants.map(t => {
-          const count = data.filter(s => s.tenant_id === t.id).length
-          return (
-            <button
-              key={t.id}
-              onClick={() => setSelectedTenant(t.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${selectedTenant === t.id ? 'bg-primary-500 text-white' : 'bg-dark-800 text-dark-300 hover:bg-dark-700'}`}
-            >
-              {t.name} ({count})
-            </button>
-          )
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="relative">
+          <select 
+            value={selectedTenant}
+            onChange={e => {
+              setSelectedTenant(e.target.value)
+              setSelectedSurvey('')
+            }}
+            className="input w-full appearance-none bg-dark-950"
+          >
+            <option value="">Tüm Kurumlar</option>
+            {tenants.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <select 
+            value={selectedSurvey}
+            onChange={e => setSelectedSurvey(e.target.value)}
+            className="input w-full appearance-none bg-dark-950"
+          >
+            <option value="">Tüm Anketler</option>
+            {Array.from(new Set(data.filter(s => selectedTenant ? s.tenant_id === selectedTenant : true).map(s => s.title))).map((title: any, i) => (
+              <option key={i} value={title}>{title}</option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <input 
+            value={search} 
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Anket veya kurum ara..." 
+            className="input w-full bg-dark-950" 
+          />
+        </div>
       </div>
 
       {/* Özet Kartlar */}
