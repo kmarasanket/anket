@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, BarChart3,
-  LogOut, Settings, ChevronRight, Shield, Key, ClipboardCheck
+  LogOut, ChevronRight, Shield, Key, ClipboardCheck, GitCompare
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
@@ -17,14 +17,16 @@ import SASurveysPage from './SASurveysPage'
 import SASurveyStatus from './SASurveyStatus'
 import AdminSurveyBuilder from '../admin/AdminSurveyBuilder'
 import AdminSurveyResults from '../admin/AdminSurveyResults'
+import SAComparisonPage from './SAComparisonPage'
 
 const navItems = [
-  { to: '/super-admin',          icon: LayoutDashboard, label: 'Dashboard',   end: true },
-  { to: '/super-admin/kurumlar', icon: Building2,        label: 'Kurumlar'            },
-  { to: '/super-admin/anketler', icon: BarChart3,        label: 'Anketler'            },
-  { to: '/super-admin/kota',     icon: ClipboardCheck,   label: 'Kota Takibi'         },
-  { to: '/super-admin/kullanicilar', icon: Users,        label: 'Kullanıcılar'        },
-  { to: '/super-admin/raporlar', icon: BarChart3,        label: 'Raporlar'            },
+  { to: '/super-admin',              icon: LayoutDashboard, label: 'Dashboard',       end: true },
+  { to: '/super-admin/kurumlar',     icon: Building2,        label: 'Kurumlar'                  },
+  { to: '/super-admin/anketler',     icon: BarChart3,        label: 'Anketler'                  },
+  { to: '/super-admin/kota',         icon: ClipboardCheck,   label: 'Kota Takibi'               },
+  { to: '/super-admin/karsilastirma', icon: GitCompare,      label: 'Karşılaştırma'             },
+  { to: '/super-admin/kullanicilar', icon: Users,            label: 'Kullanıcılar'              },
+  { to: '/super-admin/raporlar',     icon: BarChart3,        label: 'Raporlar'                  },
 ]
 
 export default function SuperAdminLayout() {
@@ -109,6 +111,7 @@ export default function SuperAdminLayout() {
             <Route path="kurumlar" element={<SATenantsPage />} />
             <Route path="anketler" element={<SASurveysPage />} />
             <Route path="kota" element={<SASurveyStatus />} />
+            <Route path="karsilastirma" element={<SAComparisonPage />} />
             <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
             <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
             <Route path="kullanicilar" element={<SAUsersPage />} />
