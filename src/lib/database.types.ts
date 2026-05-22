@@ -34,6 +34,10 @@ export interface Database {
           description: string | null
           settings: Json
           is_active: boolean
+          total_staff: number | null
+          prev_year_outpatient: number | null
+          prev_year_inpatient: number | null
+          prev_year_emergency: number | null
           created_at: string
           updated_at: string
         }

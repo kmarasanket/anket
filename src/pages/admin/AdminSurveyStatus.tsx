@@ -17,15 +17,24 @@ function calculateSampleSize(N: number): number {
   return Math.ceil(n0 / (1 + (n0 - 1) / N))
 }
 
-// Anket türüne göre kurum istatistiğinden evren büyüklüğünü getir
+// Anket türüne göre kurum istatistiğinden evren büyüklüğünü getir (Eğer DB boş/null ise varsayılan değerleri döndür)
 function getPopulationFromTenant(survey_type: string, tenant: any): number {
   switch (survey_type) {
-    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 0
-    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 0
-    case 'acil':    return Number(tenant?.prev_year_emergency)  || 0
-    case 'calisan': return Number(tenant?.total_staff)          || 0
+    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 100000
+    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 10000
+    case 'acil':    return Number(tenant?.prev_year_emergency)  || 50000
+    case 'calisan': return Number(tenant?.total_staff)          || 1000
     default:        return 0
   }
+}
+
+function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
+  const t = (title || '').toLowerCase()
+  if (t.includes('acil')) return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik')) return 'ayaktan'
+  if (t.includes('yatan')) return 'yatan'
+  if (t.includes('çalışan') || t.includes('calisan') || t.includes('personel')) return 'calisan'
+  return 'diger'
 }
 
 interface SurveyQuotaStatus {
@@ -69,18 +78,21 @@ export default function AdminSurveyStatus() {
         const settings = survey.settings || {}
 
         // Anket türü: RPC > settings > varsayılan
-        const survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+        let survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+        if (survey_type === 'diger') {
+          survey_type = detectSurveyType(survey.title)
+        }
 
         // Evren (N): RPC > manuel settings > kurum istatistiğinden (authStore.tenant)
         const population_from_tenant = getPopulationFromTenant(survey_type, tenant)
         const population_size =
-          rpcItem?.population_size ||
+          (rpcItem?.population_size && rpcItem.population_size > 0 ? rpcItem.population_size : 0) ||
           (settings.population_size && Number(settings.population_size) > 0 ? Number(settings.population_size) : 0) ||
           population_from_tenant
 
         // Örneklem (n): RPC > manuel settings > Cochran formülü
         const required_sample_size =
-          rpcItem?.required_sample_size ||
+          (rpcItem?.required_sample_size && rpcItem.required_sample_size > 0 ? rpcItem.required_sample_size : 0) ||
           (settings.required_sample_size && Number(settings.required_sample_size) > 0 ? Number(settings.required_sample_size) : 0) ||
           (population_size > 0 ? calculateSampleSize(population_size) : 0)
 

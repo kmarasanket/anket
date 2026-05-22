@@ -34,9 +34,9 @@ export default function ProtectedRoute({ children, requiredRole }: Props) {
   if (requiredRole) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
     if (!roles.includes(profile.role)) {
-      // Super admin her yere girebilir
+      // Super admin sadece super-admin paneline girebilir, kurum admin paneline (admin rotalarına) erişirse yönlendirilir
       if (profile.role === 'super_admin') {
-        return <>{children}</>
+        return <Navigate to="/super-admin" replace />
       }
       // management rolü super-admin paneline erişebilir (okuma modu)
       if (profile.role === 'management') {

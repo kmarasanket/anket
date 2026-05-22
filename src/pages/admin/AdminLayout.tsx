@@ -17,17 +17,18 @@ export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
 
-  if (profile?.role === 'super_admin') {
+  if (profile?.role === 'super_admin' || profile?.role === 'management') {
     const path = window.location.pathname
-    if (path === '/admin' || path === '/admin/') {
-      return <Navigate to="/super-admin" replace />
-    }
-    if (path === '/admin/anketler' || path === '/admin/anketler/') {
+    if (path.startsWith('/admin/anketler')) {
       return <Navigate to="/super-admin/anketler" replace />
     }
-    if (path === '/admin/ayarlar' || path === '/admin/ayarlar/') {
+    if (path.startsWith('/admin/ayarlar')) {
       return <Navigate to="/super-admin/kurumlar" replace />
     }
+    if (path.startsWith('/admin/anket-durumu')) {
+      return <Navigate to="/super-admin/kota" replace />
+    }
+    return <Navigate to="/super-admin" replace />
   }
 
   const navItems = [

@@ -10,6 +10,34 @@ import { useNotificationStore } from '../../stores/notificationStore'
 import { useConfirmModalStore } from '../../stores/confirmModalStore'
 import type { Survey } from '../../lib/database.types'
 
+// Cochran formülü: n = (Z²·p·q) / e²  →  N'e göre sonlu düzeltme
+function calculateSampleSize(N: number): number {
+  if (N <= 0) return 0
+  const n0 = 384 // Z=1.96, p=0.5, e=0.05 → 384
+  if (N <= n0) return N
+  return Math.ceil(n0 / (1 + (n0 - 1) / N))
+}
+
+// Anket türüne göre kurum istatistiğinden evren büyüklüğünü getir (Eğer DB boş/null ise varsayılan değerleri döndür)
+function getPopulationFromTenant(survey_type: string, tenant: any): number {
+  switch (survey_type) {
+    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 100000
+    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 10000
+    case 'acil':    return Number(tenant?.prev_year_emergency)  || 50000
+    case 'calisan': return Number(tenant?.total_staff)          || 1000
+    default:        return 0
+  }
+}
+
+function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
+  const t = (title || '').toLowerCase()
+  if (t.includes('acil')) return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik')) return 'ayaktan'
+  if (t.includes('yatan')) return 'yatan'
+  if (t.includes('çalışan') || t.includes('calisan') || t.includes('personel')) return 'calisan'
+  return 'diger'
+}
+
 interface QuotaStatus {
   survey_id: string
   survey_type: string
@@ -238,20 +266,33 @@ export default function AdminSurveysPage() {
             const rpcItem = quotaMap[survey.id]
             const settings = survey.settings || {}
 
-            const population_size = rpcItem?.population_size || parseInt(settings.population_size) || 0
-            const required_sample_size = rpcItem?.required_sample_size || parseInt(settings.required_sample_size) || 0
+            let survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
+            if (survey_type === 'diger') {
+              survey_type = detectSurveyType(survey.title)
+            }
+
+            const population_from_tenant = getPopulationFromTenant(survey_type, tenant)
+            const population_size =
+              (rpcItem?.population_size && rpcItem.population_size > 0 ? rpcItem.population_size : 0) ||
+              (settings.population_size && Number(settings.population_size) > 0 ? Number(settings.population_size) : 0) ||
+              population_from_tenant
+
+            const required_sample_size =
+              (rpcItem?.required_sample_size && rpcItem.required_sample_size > 0 ? rpcItem.required_sample_size : 0) ||
+              (settings.required_sample_size && Number(settings.required_sample_size) > 0 ? Number(settings.required_sample_size) : 0) ||
+              (population_size > 0 ? calculateSampleSize(population_size) : 0)
+
             const period_type = rpcItem?.period_type || settings.period_type || 'none'
             
-            let target_count = rpcItem?.target_count || parseInt(settings.target_count) || null
+            let target_count = rpcItem?.target_count || (settings.target_count && Number(settings.target_count) > 0 ? Number(settings.target_count) : null)
             if (!target_count && required_sample_size > 0) {
               if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
               else if (period_type === 'yearly') target_count = required_sample_size
             }
 
             const completed_count = rpcItem?.completed_count ?? survey.response_count ?? 0
-            const max_allowed = rpcItem?.max_allowed || parseInt(settings.max_allowed) || null
+            const max_allowed = rpcItem?.max_allowed || (settings.max_allowed ? Number(settings.max_allowed) : null)
             const is_blocked = rpcItem?.is_blocked || false
-            const survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
 
             const quota = {
               survey_id: survey.id,

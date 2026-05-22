@@ -12,7 +12,14 @@ export default function SATenantsPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Tenant | null>(null)
-  const [formData, setFormData] = useState({ name: '', description: '' })
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    total_staff: '',
+    prev_year_outpatient: '',
+    prev_year_inpatient: '',
+    prev_year_emergency: ''
+  })
   const [saving, setSaving] = useState(false)
   const { addNotification } = useNotificationStore()
 
@@ -37,11 +44,20 @@ export default function SATenantsPage() {
   const handleSave = async () => {
     if (!formData.name.trim()) return
     setSaving(true)
+
+    const parsedStats = {
+      total_staff: formData.total_staff.trim() === '' ? null : Number(formData.total_staff.replace(/\D/g, '')),
+      prev_year_outpatient: formData.prev_year_outpatient.trim() === '' ? null : Number(formData.prev_year_outpatient.replace(/\D/g, '')),
+      prev_year_inpatient: formData.prev_year_inpatient.trim() === '' ? null : Number(formData.prev_year_inpatient.replace(/\D/g, '')),
+      prev_year_emergency: formData.prev_year_emergency.trim() === '' ? null : Number(formData.prev_year_emergency.replace(/\D/g, '')),
+    }
+
     try {
       if (editItem) {
         const { error } = await supabase.from('tenants').update({
           name: formData.name.trim(),
           description: formData.description,
+          ...parsedStats
         }).eq('id', editItem.id)
         if (error) throw error
         addNotification('Kurum başarıyla güncellendi.', 'success')
@@ -52,13 +68,21 @@ export default function SATenantsPage() {
           slug: slugify(formData.name),
           is_active: true,
           settings: {},
+          ...parsedStats
         })
         if (error) throw error
         addNotification('Yeni kurum başarıyla eklendi.', 'success')
       }
       setShowForm(false)
       setEditItem(null)
-      setFormData({ name: '', description: '' })
+      setFormData({
+        name: '',
+        description: '',
+        total_staff: '',
+        prev_year_outpatient: '',
+        prev_year_inpatient: '',
+        prev_year_emergency: ''
+      })
       fetchTenants()
     } catch (err: any) {
       addNotification('Kurum kaydedilirken bir hata oluştu: ' + (err.message || ''), 'error')
@@ -82,7 +106,27 @@ export default function SATenantsPage() {
 
   const openEdit = (tenant: Tenant) => {
     setEditItem(tenant)
-    setFormData({ name: tenant.name, description: tenant.description || '' })
+    setFormData({
+      name: tenant.name,
+      description: tenant.description || '',
+      total_staff: tenant.total_staff !== null && tenant.total_staff !== undefined ? String(tenant.total_staff) : '',
+      prev_year_outpatient: tenant.prev_year_outpatient !== null && tenant.prev_year_outpatient !== undefined ? String(tenant.prev_year_outpatient) : '',
+      prev_year_inpatient: tenant.prev_year_inpatient !== null && tenant.prev_year_inpatient !== undefined ? String(tenant.prev_year_inpatient) : '',
+      prev_year_emergency: tenant.prev_year_emergency !== null && tenant.prev_year_emergency !== undefined ? String(tenant.prev_year_emergency) : '',
+    })
+    setShowForm(true)
+  }
+
+  const openAdd = () => {
+    setEditItem(null)
+    setFormData({
+      name: '',
+      description: '',
+      total_staff: '',
+      prev_year_outpatient: '',
+      prev_year_inpatient: '',
+      prev_year_emergency: ''
+    })
     setShowForm(true)
   }
 
@@ -94,7 +138,7 @@ export default function SATenantsPage() {
           <p className="page-subtitle">{tenants.length} kurum kayıtlı</p>
         </div>
         {profile?.role !== 'management' && (
-          <button onClick={() => { setEditItem(null); setFormData({ name: '', description: '' }); setShowForm(true) }}
+          <button onClick={openAdd}
             className="btn-md btn-primary">
             <Plus className="w-4 h-4" /> Kurum Ekle
           </button>
@@ -111,11 +155,11 @@ export default function SATenantsPage() {
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="card p-6 w-full max-w-md slide-in-up">
+          <div className="card p-6 w-full max-w-lg slide-in-up">
             <h2 className="text-lg font-bold text-dark-50 mb-5">
               {editItem ? 'Kurumu Düzenle' : 'Yeni Kurum Ekle'}
             </h2>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
               <div>
                 <label className="label">Kurum Adı *</label>
                 <input value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
@@ -124,9 +168,59 @@ export default function SATenantsPage() {
               <div>
                 <label className="label">Açıklama</label>
                 <textarea value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Kurum hakkında kısa bilgi..." rows={3} className="input resize-none" />
+                  placeholder="Kurum hakkında kısa bilgi..." rows={2} className="input resize-none" />
+              </div>
+
+              <div className="border-t border-dark-800 pt-4 space-y-4">
+                <h3 className="text-xs font-bold text-dark-400 uppercase tracking-wider">Kurum Nüfus İstatistikleri</h3>
+                
+                <div>
+                  <label className="label text-xs">Toplam Personel Sayısı</label>
+                  <input
+                    type="text"
+                    value={formData.total_staff}
+                    onChange={e => setFormData(p => ({ ...p, total_staff: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="örn. 1000"
+                    className="input"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="label text-xs">Poliklinik (Ayaktan)</label>
+                    <input
+                      type="text"
+                      value={formData.prev_year_outpatient}
+                      onChange={e => setFormData(p => ({ ...p, prev_year_outpatient: e.target.value.replace(/\D/g, '') }))}
+                      placeholder="örn. 100000"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-xs">Yatan Hasta</label>
+                    <input
+                      type="text"
+                      value={formData.prev_year_inpatient}
+                      onChange={e => setFormData(p => ({ ...p, prev_year_inpatient: e.target.value.replace(/\D/g, '') }))}
+                      placeholder="örn. 10000"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-xs">Acil Servis</label>
+                    <input
+                      type="text"
+                      value={formData.prev_year_emergency}
+                      onChange={e => setFormData(p => ({ ...p, prev_year_emergency: e.target.value.replace(/\D/g, '') }))}
+                      placeholder="örn. 50000"
+                      className="input"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-dark-500 italic">Boş bırakılan veya 0 girilen alanlar için Cochran formülünde varsayılan ulusal standart evren büyüklükleri kullanılacaktır.</p>
               </div>
             </div>
+            
             <div className="flex gap-3 mt-6">
               <button onClick={() => { setShowForm(false); setEditItem(null) }}
                 className="btn-md btn-secondary flex-1">İptal</button>
@@ -160,7 +254,12 @@ export default function SATenantsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-dark-100 truncate">{tenant.name}</p>
-                <p className="text-xs text-dark-500 mt-0.5">{tenant.description || 'Açıklama yok'} · {formatDate(tenant.created_at)}</p>
+                <div className="text-xs text-dark-500 mt-0.5 space-y-1">
+                  <p>{tenant.description || 'Açıklama yok'} · {formatDate(tenant.created_at)}</p>
+                  <p className="text-[10px] text-dark-400 bg-dark-900/50 px-2 py-1 rounded inline-block">
+                    İstatistikler: <span className="font-semibold text-dark-200">Çalışan:</span> {tenant.total_staff !== null ? tenant.total_staff.toLocaleString('tr-TR') : 'Varsayılan (1.000)'} · <span className="font-semibold text-dark-200">Ayaktan:</span> {tenant.prev_year_outpatient !== null ? tenant.prev_year_outpatient.toLocaleString('tr-TR') : 'Varsayılan (100.000)'} · <span className="font-semibold text-dark-200">Yatan:</span> {tenant.prev_year_inpatient !== null ? tenant.prev_year_inpatient.toLocaleString('tr-TR') : 'Varsayılan (10.000)'} · <span className="font-semibold text-dark-200">Acil:</span> {tenant.prev_year_emergency !== null ? tenant.prev_year_emergency.toLocaleString('tr-TR') : 'Varsayılan (50.000)'}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className={tenant.is_active ? 'badge-success' : 'badge-neutral'}>
