@@ -35,8 +35,8 @@ export default function AdminLayout() {
   const navItems = [
     { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard', end: true },
     { to: '/admin/anketler', icon: FileText,        label: 'Anketler'         },
-    { to: '/admin/donemsel-karsilastirma', icon: TrendingUp, label: 'Dönemsel Karşılaştırma' },
     { to: '/admin/anket-durumu', icon: ClipboardCheck, label: 'Anket Durumu'   },
+    { to: '/admin/donemsel-karsilastirma', icon: TrendingUp, label: 'Dönemsel Karşılaştırma' },
     { to: '/admin/ayarlar',  icon: Settings,        label: 'Kurum Ayarları'   },
   ]
 
