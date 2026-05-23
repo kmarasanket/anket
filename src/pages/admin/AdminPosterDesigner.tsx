@@ -65,7 +65,7 @@ export default function AdminPosterDesigner() {
           .from('surveys')
           .select('id, title, slug')
           .eq('tenant_id', tenant.id)
-          .eq('is_active', true)
+          .eq('status', 'active')
           .order('created_at', { ascending: false })
 
         if (sErr) throw sErr
