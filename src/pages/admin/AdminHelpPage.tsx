@@ -314,7 +314,7 @@ export default function AdminHelpPage() {
           </p>
         </div>
         <div className="shrink-0 text-xs font-semibold text-dark-400 bg-dark-800 px-3 py-1.5 rounded-lg border border-dark-750">
-          Destek E-posta: bilgi@saglik.gov.tr
+          Destek E-posta: kahramanmaras@saglik.gov.tr
         </div>
       </div>
 
