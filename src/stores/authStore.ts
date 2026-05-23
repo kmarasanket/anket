@@ -74,14 +74,16 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        // Yerel verileri hemen temizle (bloklamayan, anında çıkış için)
+        clearTokenCache()
+        set({ user: null, profile: null, tenant: null })
+        localStorage.removeItem('auth-store')
+
         try {
-          await supabase.auth.signOut()
+          // Supabase oturumunu arka planda kapat (bekleme yapmadan)
+          supabase.auth.signOut().catch(err => console.error('SignOut background error:', err))
         } catch (err) {
           console.error('Logout error:', err)
-        } finally {
-          clearTokenCache()
-          set({ user: null, profile: null, tenant: null })
-          localStorage.removeItem('auth-store')
         }
       },
 
