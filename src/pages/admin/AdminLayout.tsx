@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck, TrendingUp, AlertTriangle } from 'lucide-react'
+import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck, TrendingUp, AlertTriangle, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
 import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
@@ -13,6 +13,7 @@ import AdminSurveyResults from './AdminSurveyResults'
 import AdminSettings from './AdminSettings'
 import AdminSurveyStatus from './AdminSurveyStatus'
 import AdminPeriodComparison from './AdminPeriodComparison'
+import AdminHelpPage from './AdminHelpPage'
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
@@ -70,6 +71,7 @@ export default function AdminLayout() {
     { to: '/admin/anket-durumu', icon: ClipboardCheck, label: 'Anket Durumu'   },
     { to: '/admin/donemsel-karsilastirma', icon: TrendingUp, label: 'Dönemsel Karşılaştırma' },
     { to: '/admin/ayarlar',  icon: Settings,        label: 'Kurum Ayarları'   },
+    { to: '/admin/yardim',   icon: HelpCircle,      label: 'Bilgi ve Yardım'  },
   ]
 
   return (
@@ -193,6 +195,8 @@ export default function AdminLayout() {
             <Route path="anket-durumu" element={<AdminSurveyStatus />} />
             {/* Period Comparison */}
             <Route path="donemsel-karsilastirma" element={<AdminPeriodComparison />} />
+            {/* Help and Documentation */}
+            <Route path="yardim" element={<AdminHelpPage />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>
