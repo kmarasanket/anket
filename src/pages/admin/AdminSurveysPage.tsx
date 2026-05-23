@@ -506,7 +506,7 @@ export default function AdminSurveysPage() {
                   <div className="flex flex-col items-center w-full" id="qr-print-body">
                     <img id="qr-logo" src="/logo_ism.png" alt="Logo" className="w-auto object-contain hidden" style={{ height: '0px' }} />
                     <p id="qr-tenant" className="text-black font-bold text-center text-xs tracking-wider hidden">
-                      {tenant?.name?.toUpperCase() || 'KAHRAMANMARAŞ İL SAĞLIK MÜDÜRLÜĞÜ'}
+                      {tenant?.name?.toLocaleUpperCase('tr-TR') || 'KAHRAMANMARAŞ İL SAĞLIK MÜDÜRLÜĞÜ'}
                     </p>
                     <p id="qr-title" className="text-black font-bold text-center text-sm leading-tight w-full break-words mb-4 mt-1" style={{ color: 'black' }}>
                       {shareModal.title}
