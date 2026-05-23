@@ -1,192 +1,154 @@
 import { useEffect, useState } from 'react'
 import {
-  ClipboardCheck, Users, Percent, HelpCircle,
-  AlertTriangle, CheckCircle, Ban, ArrowRight,
-  TrendingUp, Calendar, Pause, Play, X
+  ClipboardCheck, Users, Percent, RefreshCw,
+  AlertTriangle, CheckCircle, TrendingUp, Pause, Play,
+  Info, Building2
 } from 'lucide-react'
 import { httpRpc, httpFrom } from '../../lib/supabaseHttp'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useConfirmModalStore } from '../../stores/confirmModalStore'
 
-// Cochran formülü: n = (Z²·p·q) / e²  →  N'e göre sonlu düzeltme
-function calculateSampleSize(N: number): number {
+// ─── Cochran Formülü ──────────────────────────────────────────────────────────
+function cochran(N: number): number {
   if (N <= 0) return 0
-  const n0 = 384 // Z=1.96, p=0.5, e=0.05 → 384
+  const n0 = 384
   if (N <= n0) return N
   return Math.ceil(n0 / (1 + (n0 - 1) / N))
 }
 
-// Anket türüne göre kurum istatistiğinden evren büyüklüğünü getir (Eğer DB boş/null ise varsayılan değerleri döndür)
-function getPopulationFromTenant(survey_type: string, tenant: any): number {
-  switch (survey_type) {
-    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 100000
-    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 10000
-    case 'acil':    return Number(tenant?.prev_year_emergency)  || 50000
-    case 'calisan': return Number(tenant?.total_staff)          || 1000
+// ─── Anket Türüne Göre Evren Büyüklüğü ───────────────────────────────────────
+// Kaynak: Kurum Ayarları sayfasındaki istatistikler (authStore.tenant)
+function getPopulation(surveyType: string, tenant: any): number {
+  switch (surveyType) {
+    case 'ayaktan': return Number(tenant?.prev_year_outpatient) || 0
+    case 'yatan':   return Number(tenant?.prev_year_inpatient)  || 0
+    case 'acil':    return Number(tenant?.prev_year_emergency)  || 0
+    case 'calisan': return Number(tenant?.total_staff)          || 0
     default:        return 0
   }
 }
 
+// ─── Anket Türü Tespiti (Başlıktan Otomatik) ─────────────────────────────────
 function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
   const t = (title || '').toLowerCase()
-  if (t.includes('acil')) return 'acil'
-  if (t.includes('ayaktan') || t.includes('poliklinik')) return 'ayaktan'
-  if (t.includes('yatan')) return 'yatan'
+  if (t.includes('acil'))                                               return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik'))              return 'ayaktan'
+  if (t.includes('yatan'))                                              return 'yatan'
   if (t.includes('çalışan') || t.includes('calisan') || t.includes('personel')) return 'calisan'
   return 'diger'
 }
 
-interface SurveyQuotaStatus {
-  survey_id: string
-  title: string
-  slug: string
-  status: string
-  survey_type: 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger'
-  population_size: number
-  required_sample_size: number
-  period_type: 'monthly' | 'yearly' | 'none'
-  target_count: number | null
-  completed_count: number
-  max_allowed: number | null
-  is_blocked: boolean
+const SURVEY_TYPE_META: Record<string, { label: string; source: string; color: string }> = {
+  ayaktan: {
+    label:  'Ayaktan Hasta (Poliklinik)',
+    source: 'Bir Önceki Yıl Poliklinik Hasta Sayısı',
+    color:  'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+  },
+  yatan: {
+    label:  'Yatan Hasta',
+    source: 'Bir Önceki Yıl Yatan Hasta Sayısı',
+    color:  'text-purple-400 bg-purple-500/10 border-purple-500/30',
+  },
+  acil: {
+    label:  'Acil Servis',
+    source: 'Bir Önceki Yıl Acil Servis Sayısı',
+    color:  'text-red-400 bg-red-500/10 border-red-500/30',
+  },
+  calisan: {
+    label:  'Çalışan Deneyimi',
+    source: 'Toplam Personel Sayısı',
+    color:  'text-blue-400 bg-blue-500/10 border-blue-500/30',
+  },
+  diger: {
+    label:  'Genel Anket',
+    source: '—',
+    color:  'text-dark-400 bg-dark-800 border-dark-700',
+  },
+}
+
+interface SurveyRow {
+  id:             string
+  title:          string
+  slug:           string
+  status:         string
+  response_count: number
+  settings:       any
 }
 
 export default function AdminSurveyStatus() {
   const { tenant } = useAuthStore()
   const { addNotification } = useNotificationStore()
-  const { showConfirm } = useConfirmModalStore()
-  const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<SurveyQuotaStatus[]>([])
+  const { showConfirm }     = useConfirmModalStore()
 
-  const loadQuotaStatus = async () => {
+  const [loading,       setLoading]       = useState(true)
+  const [surveys,       setSurveys]       = useState<SurveyRow[]>([])
+  const [monthlyMap,    setMonthlyMap]    = useState<Record<string, number>>({})
+
+  const now    = new Date()
+  const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
+  const monthLabel = `${months[now.getMonth()]} ${now.getFullYear()}`
+
+  // ─── Veri Yükleme ─────────────────────────────────────────────────────────
+  const load = async () => {
     if (!tenant?.id) return
     setLoading(true)
     try {
-      const [quotaRes, surveysRes] = await Promise.all([
-        httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id }),
-        httpFrom('surveys').select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: false }).execute()
-      ])
+      // Anket listesi
+      const { data: surveyData, error } = await httpFrom('surveys')
+        .select('id, title, slug, status, response_count, settings')
+        .eq('tenant_id', tenant.id)
+        .order('created_at', { ascending: false })
+        .execute()
+      if (error) throw error
+      setSurveys(surveyData || [])
 
-      const rpcData = (quotaRes.data && Array.isArray(quotaRes.data)) ? (quotaRes.data as SurveyQuotaStatus[]) : []
-      const surveysData = surveysRes.data || []
-
-      const rpcMap = new Map(rpcData.map(d => [d.survey_id, d]))
-
-      const mergedData: SurveyQuotaStatus[] = surveysData.map((survey: any) => {
-        const rpcItem = rpcMap.get(survey.id)
-        const settings = survey.settings || {}
-
-        // Anket türü: RPC > settings > varsayılan
-        let survey_type = rpcItem?.survey_type || settings.survey_type || 'diger'
-        if (survey_type === 'diger') {
-          survey_type = detectSurveyType(survey.title)
+      // Bu ayki katılım (RPC)
+      try {
+        const { data: rpcData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id })
+        if (rpcData && Array.isArray(rpcData)) {
+          const map: Record<string, number> = {}
+          rpcData.forEach((r: any) => { map[r.survey_id] = r.completed_count ?? 0 })
+          setMonthlyMap(map)
         }
-
-        // Evren (N): RPC > manuel settings > kurum istatistiğinden (authStore.tenant)
-        const population_from_tenant = getPopulationFromTenant(survey_type, tenant)
-        const population_size =
-          (rpcItem?.population_size && rpcItem.population_size > 0 ? rpcItem.population_size : 0) ||
-          (settings.population_size && Number(settings.population_size) > 0 ? Number(settings.population_size) : 0) ||
-          population_from_tenant
-
-        // Örneklem (n): RPC > manuel settings > Cochran formülü
-        const required_sample_size =
-          (rpcItem?.required_sample_size && rpcItem.required_sample_size > 0 ? rpcItem.required_sample_size : 0) ||
-          (settings.required_sample_size && Number(settings.required_sample_size) > 0 ? Number(settings.required_sample_size) : 0) ||
-          (population_size > 0 ? calculateSampleSize(population_size) : 0)
-
-        const period_type = rpcItem?.period_type || settings.period_type || 'none'
-
-        let target_count = rpcItem?.target_count || (settings.target_count && Number(settings.target_count) > 0 ? Number(settings.target_count) : null)
-        if (!target_count && required_sample_size > 0) {
-          if (period_type === 'monthly') target_count = Math.ceil(required_sample_size / 12)
-          else if (period_type === 'yearly') target_count = required_sample_size
-        }
-
-        return {
-          survey_id: survey.id,
-          title: survey.title,
-          slug: survey.slug,
-          status: survey.status,
-          survey_type,
-          population_size,
-          required_sample_size,
-          period_type,
-          target_count,
-          completed_count: rpcItem?.completed_count ?? survey.response_count ?? 0,
-          max_allowed: rpcItem?.max_allowed || (settings.max_allowed ? Number(settings.max_allowed) : null),
-          is_blocked: rpcItem?.is_blocked || false
-        }
-      })
-
-      setData(mergedData)
+      } catch {
+        // RPC yoksa response_count kullan
+      }
     } catch (err: any) {
-      console.error(err)
-      addNotification('Anket kota durumları yüklenemedi: ' + (err.message || ''), 'error')
+      addNotification('Veriler yüklenemedi: ' + (err.message || ''), 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadQuotaStatus()
-  }, [tenant?.id])
+  useEffect(() => { load() }, [tenant?.id])
 
+  // ─── Anket Aç/Kapat ───────────────────────────────────────────────────────
   const handleToggleStatus = (id: string, title: string, currentStatus: string) => {
     const isClosing = currentStatus === 'active'
     showConfirm({
-      title: isClosing ? 'Anketi Durdur' : 'Anketi Başlat',
-      message: `'${title}' anketini ${isClosing ? 'duraklatmak' : 'katılıma açmak'} istediğinize emin misiniz?`,
-      detail: isClosing 
-        ? 'Anketi durdurduğunuzda katılımcılar yeni yanıt gönderemeyecektir.'
-        : 'Anketi başlattığınızda katılımcılar tekrar yanıt gönderebilecektir.',
+      title:       isClosing ? 'Anketi Durdur' : 'Anketi Başlat',
+      message:     `'${title}' anketini ${isClosing ? 'duraklatmak' : 'katılıma açmak'} istediğinize emin misiniz?`,
       confirmText: isClosing ? 'Evet, Anketi Durdur' : 'Evet, Anketi Başlat',
-      cancelText: 'Vazgeç',
-      variant: isClosing ? 'danger' : 'success',
+      cancelText:  'Vazgeç',
+      variant:     isClosing ? 'danger' : 'success',
       onConfirm: async () => {
         try {
-          const newStatus = isClosing ? 'closed' : 'active'
-          const { error } = await httpFrom('surveys').update({ status: newStatus }).eq('id', id).execute()
+          const { error } = await httpFrom('surveys')
+            .update({ status: isClosing ? 'closed' : 'active' })
+            .eq('id', id)
+            .execute()
           if (error) throw error
-          addNotification(
-            isClosing ? 'Anket katılıma kapatıldı.' : 'Anket katılıma açıldı.',
-            'success'
-          )
-          loadQuotaStatus()
-        } catch (err: any) {
-          addNotification('Anket durumu güncellenirken bir hata oluştu.', 'error')
+          addNotification(isClosing ? 'Anket kapatıldı.' : 'Anket açıldı.', 'success')
+          load()
+        } catch {
+          addNotification('Durum güncellenirken hata oluştu.', 'error')
         }
-      }
+      },
     })
   }
 
-  const getSurveyTypeLabel = (type: string) => {
-    switch (type) {
-      case 'ayaktan': return 'Ayaktan Hasta (Poliklinik)'
-      case 'yatan': return 'Yatan Hasta'
-      case 'acil': return 'Acil Servis'
-      case 'calisan': return 'Çalışan Geri Bildirim'
-      default: return 'Genel Anket'
-    }
-  }
-
-  const getPeriodLabel = (p: string) => {
-    const now = new Date()
-    const months = [
-      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
-    ]
-    const currentMonth = months[now.getMonth()]
-    const currentYear = now.getFullYear()
-
-    switch (p) {
-      case 'monthly': return `Aylık (${currentMonth} ${currentYear})`
-      case 'yearly': return `Yıllık (${currentYear})`
-      default: return 'Süresiz'
-    }
-  }
-
+  // ─── Yükleniyor ───────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="animate-in space-y-6">
@@ -194,243 +156,254 @@ export default function AdminSurveyStatus() {
           <div className="w-48 h-7 bg-dark-800 rounded animate-pulse" />
           <div className="w-72 h-4 bg-dark-800 rounded animate-pulse mt-2" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 bg-dark-800 rounded-xl animate-pulse" />
-          ))}
-        </div>
-        <div className="card p-6 space-y-6">
-          <div className="w-full h-40 bg-dark-800 rounded-xl animate-pulse" />
-          <div className="w-full h-40 bg-dark-800 rounded-xl animate-pulse" />
-        </div>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="card p-6 h-56 animate-pulse bg-dark-800" />
+        ))}
       </div>
     )
   }
 
+  // Özet istatistik
+  const withTarget = surveys.filter(s => {
+    const type = detectSurveyType(s.title)
+    return getPopulation(type, tenant) > 0
+  })
+  const totalThisMonth = withTarget.reduce((acc, s) => acc + (monthlyMap[s.id] ?? s.response_count ?? 0), 0)
+  const avgPct = withTarget.length > 0
+    ? Math.round(withTarget.reduce((acc, s) => {
+        const type = detectSurveyType(s.title)
+        const N    = getPopulation(type, tenant)
+        if (!N) return acc
+        const n      = cochran(N)
+        const target = Math.ceil(n / 12)
+        const done   = monthlyMap[s.id] ?? s.response_count ?? 0
+        return acc + (target > 0 ? (done / target) * 100 : 0)
+      }, 0) / withTarget.length)
+    : 0
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="animate-in space-y-6">
-      <div className="page-header">
-        <h1 className="page-title">Anket Örneklem & Kota Takibi</h1>
-        <p className="page-subtitle">
-          Kurum istatistiklerine göre hedeflenen örneklem sayıları ve aktif dönem katılım durumları
-        </p>
+
+      {/* Başlık */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="page-header mb-0">
+          <h1 className="page-title">Anket Örneklem Takibi</h1>
+          <p className="page-subtitle">
+            Kurum istatistiklerinden otomatik hesaplanan hedef ve {monthLabel} dönemi katılım durumları
+          </p>
+        </div>
+        <button onClick={load} className="btn-md btn-secondary flex items-center gap-2 self-start sm:self-auto">
+          <RefreshCw className="w-4 h-4" /> Yenile
+        </button>
       </div>
 
-      {data.length === 0 ? (
-        <div className="card p-12 text-center flex flex-col items-center">
-          <ClipboardCheck className="w-16 h-16 text-dark-700 mb-3" />
-          <p className="text-dark-300 font-medium mb-1">Takip edilecek aktif anket bulunamadı</p>
-          <p className="text-dark-500 text-sm">Hedefleri belirlemek için önce anket oluşturmalısınız.</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Genel Özet Kartları */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="stat-card">
-              <div className="stat-icon bg-blue-500/10">
-                <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-blue-400 rounded-lg flex items-center justify-center">
-                  <Users className="w-3.5 h-3.5 text-white" />
-                </div>
-              </div>
-              <div>
-                <p className="text-dark-400 text-xs mb-1">Toplam Aktif Anketler</p>
-                <p className="text-2xl font-display font-bold text-dark-50">
-                  {data.filter(s => s.status === 'active').length}
-                </p>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon bg-emerald-500/10">
-                <div className="w-6 h-6 bg-gradient-to-br from-emerald-600 to-emerald-400 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-3.5 h-3.5 text-white" />
-                </div>
-              </div>
-              <div>
-                <p className="text-dark-400 text-xs mb-1">Hedefe Ulaşan Anketler</p>
-                <p className="text-2xl font-display font-bold text-dark-50 text-emerald-400">
-                  {data.filter(s => s.target_count && s.completed_count >= s.target_count).length}
-                </p>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon bg-purple-500/10">
-                <div className="w-6 h-6 bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center">
-                  <Percent className="w-3.5 h-3.5 text-white" />
-                </div>
-              </div>
-              <div>
-                <p className="text-dark-400 text-xs mb-1">Ortalama Katılım Oranı</p>
-                <p className="text-2xl font-display font-bold text-dark-50">
-                  %{Math.round(
-                    data.reduce((acc, curr) => {
-                      if (!curr.target_count) return acc
-                      return acc + ((curr.completed_count / curr.target_count) * 100)
-                    }, 0) / (data.filter(s => s.target_count).length || 1)
-                  )}
-                </p>
-              </div>
+      {/* Özet Kartlar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="stat-card">
+          <div className="stat-icon bg-blue-500/10">
+            <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-blue-400 rounded-lg flex items-center justify-center">
+              <ClipboardCheck className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
+          <div>
+            <p className="text-dark-400 text-xs mb-1">Aktif Anket</p>
+            <p className="text-2xl font-display font-bold text-dark-50">
+              {surveys.filter(s => s.status === 'active').length}
+            </p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon bg-primary-500/10">
+            <div className="w-6 h-6 bg-gradient-to-br from-primary-600 to-primary-400 rounded-lg flex items-center justify-center">
+              <Users className="w-3.5 h-3.5 text-white" />
+            </div>
+          </div>
+          <div>
+            <p className="text-dark-400 text-xs mb-1">Bu Ay Toplam Katılım</p>
+            <p className="text-2xl font-display font-bold text-dark-50">
+              {totalThisMonth.toLocaleString('tr-TR')}
+            </p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon bg-purple-500/10">
+            <div className="w-6 h-6 bg-gradient-to-br from-purple-600 to-purple-400 rounded-lg flex items-center justify-center">
+              <Percent className="w-3.5 h-3.5 text-white" />
+            </div>
+          </div>
+          <div>
+            <p className="text-dark-400 text-xs mb-1">Ort. Tamamlama Oranı</p>
+            <p className="text-2xl font-display font-bold text-dark-50">%{avgPct}</p>
+          </div>
+        </div>
+      </div>
 
-          {/* Anket Bazlı Detay Kartları */}
-          <div className="grid grid-cols-1 gap-6">
-            {data.map(survey => {
-              const target = survey.target_count
-              const comp = survey.completed_count
-              const progressPercent = target ? Math.round((comp / target) * 100) : 0
-
-              let statusColor = 'text-blue-400 bg-blue-500/10'
-              let statusText = 'Katılım Alıyor'
-              let statusIcon = <TrendingUp className="w-4 h-4" />
-
-              if (survey.status === 'closed') {
-                statusColor = 'text-red-400 bg-red-500/10'
-                statusText = 'Duraklatıldı (Kapalı)'
-                statusIcon = <Pause className="w-4 h-4" />
-              } else if (target && comp >= target) {
-                statusColor = 'text-emerald-400 bg-emerald-500/10'
-                statusText = comp > target ? `Hedef Aşıldı (+${comp - target})` : 'Hedefe Ulaşıldı'
-                statusIcon = <CheckCircle className="w-4 h-4" />
-              } else if (target && comp >= target * 0.8) {
-                statusColor = 'text-warning-400 bg-warning-500/10'
-                statusText = 'Hedefe Yakın'
-                statusIcon = <AlertTriangle className="w-4 h-4" />
-              }
-
-              return (
-                <div key={survey.survey_id} className="card p-6 space-y-6">
-                  {/* Başlık ve Durum */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-dark-800 pb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className="text-xs font-semibold text-primary-400 uppercase tracking-wider bg-primary-500/10 px-2 py-0.5 rounded-full">
-                          {getSurveyTypeLabel(survey.survey_type)}
-                        </span>
-                        <span className="text-xs font-semibold text-dark-400 bg-dark-800 px-2 py-0.5 rounded-full">
-                          Dönem: {getPeriodLabel(survey.period_type)}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-lg text-dark-50">{survey.title}</h3>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
-                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-sm ${statusColor}`}>
-                        {statusIcon}
-                        {statusText}
-                      </div>
-
-                      <button
-                        onClick={() => handleToggleStatus(survey.survey_id, survey.title, survey.status)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-sm border transition-colors ${
-                          survey.status === 'active'
-                            ? 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
-                            : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
-                        }`}
-                      >
-                        {survey.status === 'active' ? (
-                          <>
-                            <Pause className="w-3.5 h-3.5" />
-                            Anketi Durdur
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3.5 h-3.5" />
-                            Anketi Başlat
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* İstatistikler */}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-                    <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
-                      <p className="text-xs text-dark-500 mb-1">Evren Büyüklüğü (N)</p>
-                      <p className="text-xl font-bold text-dark-100">
-                        {survey.population_size ? survey.population_size.toLocaleString('tr-TR') : 'Belirtilmemiş'}
-                      </p>
-                    </div>
-
-                    <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
-                      <p className="text-xs text-dark-500 mb-1">Gerekli Örneklem (n)</p>
-                      <p className="text-xl font-bold text-dark-100">
-                        {survey.required_sample_size ? survey.required_sample_size.toLocaleString('tr-TR') : 'Belirtilmemiş'}
-                      </p>
-                    </div>
-
-                    <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
-                      <p className="text-xs text-dark-500 mb-1">Dönem Hedefi</p>
-                      <p className="text-xl font-bold text-dark-100">
-                        {target ? target.toLocaleString('tr-TR') : 'Sınırsız'}
-                      </p>
-                      <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
-                        {survey.period_type === 'monthly' ? 'Aylık Hedef (n / 12)' : survey.period_type === 'yearly' ? 'Yıllık Hedef (n)' : 'Hedef'}
-                      </p>
-                    </div>
-
-                    <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
-                      <p className="text-xs text-dark-500 mb-1">Mevcut Katılım</p>
-                      <p className="text-xl font-bold text-primary-400">
-                        {comp.toLocaleString('tr-TR')}
-                      </p>
-                      <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
-                        {survey.period_type === 'monthly' ? 'Bu Ayki Katılım' : survey.period_type === 'yearly' ? 'Bu Yılki Katılım' : 'Toplam'}
-                      </p>
-                    </div>
-
-                    <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50 col-span-2 md:col-span-1">
-                      <p className="text-xs text-dark-500 mb-1">Hedef Kalan / Kota Aşımı</p>
-                      <p className="text-xl font-bold text-dark-100">
-                        {target ? (
-                          comp >= target ? (
-                            <span className="text-emerald-400">+{comp - target}</span>
-                          ) : (
-                            `${target - comp}`
-                          )
-                        ) : (
-                          'Sınırsız'
-                        )}
-                      </p>
-                      <p className="text-[10px] text-dark-500 mt-1.5 font-medium">
-                        {target ? (comp >= target ? 'Kota Üzeri Katılım' : 'Kalan Gerekli Katılım') : 'Limit Yok'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* İlerleme Çubuğu */}
-                  {target && (
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-dark-400">Dönem İlerlemesi</span>
-                        <span className="text-primary-400">
-                          %{progressPercent}
-                        </span>
-                      </div>
-                      <div className="relative w-full h-3 bg-dark-900 rounded-full overflow-hidden border border-dark-800">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            comp >= target
-                              ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
-                              : 'bg-gradient-to-r from-primary-500 to-primary-400'
-                          }`}
-                          style={{ width: `${Math.min((comp / target) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-[10px] text-dark-500">
-                        <span>Başlangıç</span>
-                        <span>Hedef ({target})</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+      {/* Kurum İstatistikleri Eksik Uyarısı */}
+      {tenant && !tenant.prev_year_outpatient && !tenant.prev_year_inpatient && !tenant.prev_year_emergency && !tenant.total_staff && (
+        <div className="card p-4 border-amber-500/20 bg-amber-500/5 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-300">Kurum İstatistikleri Eksik</p>
+            <p className="text-xs text-amber-400/80 mt-0.5">
+              Kota hesaplaması yapılabilmesi için <strong>Kurum Ayarları</strong> sayfasından hasta ve personel sayılarını giriniz.
+              Girilen veriler tüm anket türleri için otomatik olarak kullanılacaktır.
+            </p>
           </div>
         </div>
       )}
 
+      {/* Anket Listesi */}
+      {surveys.length === 0 ? (
+        <div className="card p-12 text-center flex flex-col items-center">
+          <ClipboardCheck className="w-16 h-16 text-dark-700 mb-3" />
+          <p className="text-dark-300 font-medium">Henüz anket bulunamadı</p>
+          <p className="text-dark-500 text-sm mt-1">Anketler oluşturulduktan sonra burada görünecektir.</p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {surveys.map(survey => {
+            const surveyType = detectSurveyType(survey.title)
+            const meta       = SURVEY_TYPE_META[surveyType]
+            const N          = getPopulation(surveyType, tenant)
+            const n          = cochran(N)
+            const target     = n > 0 ? Math.ceil(n / 12) : 0
+            const done       = monthlyMap[survey.id] ?? survey.response_count ?? 0
+            const pct        = target > 0 ? Math.min(Math.round((done / target) * 100), 100) : 0
+            const hasData    = N > 0 && target > 0
+
+            // Durum
+            const isGoal  = hasData && done >= target
+            const isClose = hasData && !isGoal && done >= target * 0.8
+            const barColor = isGoal ? 'bg-emerald-500' : isClose ? 'bg-amber-500' : 'bg-primary-500'
+
+            return (
+              <div key={survey.id} className="card p-6 space-y-5">
+
+                {/* Başlık + Durum + Kontroller */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-dark-800 pb-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${meta.color}`}>
+                        {meta.label}
+                      </span>
+                      <span className="text-xs text-dark-500 bg-dark-800 px-2.5 py-1 rounded-full">
+                        {monthLabel}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-lg text-dark-50">{survey.title}</h3>
+                    {meta.source !== '—' && (
+                      <p className="text-[10px] text-dark-500 flex items-center gap-1 mt-1">
+                        <Info className="w-3 h-3" />
+                        Evren kaynağı: {meta.source}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap self-start">
+                    {/* Durum etiketi */}
+                    <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-sm ${
+                      survey.status === 'closed'
+                        ? 'text-red-400 bg-red-500/10'
+                        : isGoal
+                          ? 'text-emerald-400 bg-emerald-500/10'
+                          : isClose
+                            ? 'text-amber-400 bg-amber-500/10'
+                            : 'text-blue-400 bg-blue-500/10'
+                    }`}>
+                      {survey.status === 'closed'
+                        ? <><Pause className="w-4 h-4" /> Duraklatıldı</>
+                        : isGoal
+                          ? <><CheckCircle className="w-4 h-4" /> Hedefe Ulaşıldı</>
+                          : isClose
+                            ? <><AlertTriangle className="w-4 h-4" /> Hedefe Yakın</>
+                            : <><TrendingUp className="w-4 h-4" /> Devam Ediyor</>
+                      }
+                    </span>
+                    {/* Aç/Kapat */}
+                    <button
+                      onClick={() => handleToggleStatus(survey.id, survey.title, survey.status)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-sm border transition-colors ${
+                        survey.status === 'active'
+                          ? 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
+                          : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      {survey.status === 'active'
+                        ? <><Pause className="w-3.5 h-3.5" /> Durdur</>
+                        : <><Play  className="w-3.5 h-3.5" /> Başlat</>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Metrik Kartları */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  {[
+                    { label: 'Evren (N)',      value: N > 0   ? N.toLocaleString('tr-TR')      : '—', sub: 'Bir önceki yıl' },
+                    { label: 'Örneklem (n)',   value: n > 0   ? n.toLocaleString('tr-TR')      : '—', sub: 'Cochran formülü' },
+                    { label: 'Aylık Hedef',    value: target > 0 ? target.toLocaleString('tr-TR') : '—', sub: 'n ÷ 12' },
+                    { label: 'Bu Ay Katılım',  value: done.toLocaleString('tr-TR'),                    sub: monthLabel, highlight: true },
+                    { label: 'Kalan / Aşım',
+                      value: !hasData ? '—' : done >= target
+                        ? `+${done - target}`
+                        : `${target - done}`,
+                      sub: !hasData ? 'Veri yok' : done >= target ? 'Kota aşımı' : 'Kalan',
+                      success: hasData && done >= target,
+                    },
+                  ].map(({ label, value, sub, highlight, success }) => (
+                    <div key={label} className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
+                      <p className="text-xs text-dark-500 mb-1">{label}</p>
+                      <p className={`text-xl font-bold ${
+                        success   ? 'text-emerald-400'
+                        : highlight ? 'text-primary-400'
+                        : 'text-dark-100'
+                      }`}>
+                        {value}
+                      </p>
+                      <p className="text-[10px] text-dark-600 mt-1">{sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* İlerleme Çubuğu */}
+                {hasData ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-dark-400">Aylık Dönem İlerlemesi</span>
+                      <span className={isGoal ? 'text-emerald-400' : isClose ? 'text-amber-400' : 'text-primary-400'}>
+                        %{pct}
+                      </span>
+                    </div>
+                    <div className="relative w-full h-3 bg-dark-900 rounded-full overflow-hidden border border-dark-800">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-dark-500">
+                      <span>0</span>
+                      <span>Hedef: {target.toLocaleString('tr-TR')}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-dark-500 bg-dark-900/40 rounded-xl px-4 py-3 border border-dark-800/40">
+                    <AlertTriangle className="w-4 h-4 text-amber-500/60 flex-shrink-0" />
+                    <span>
+                      Bu anket için kota hesabı yapılamamaktadır.
+                      <strong className="text-dark-400"> Kurum Ayarları</strong> sayfasından
+                      {surveyType === 'ayaktan' && ' poliklinik hasta sayısını'}
+                      {surveyType === 'yatan'   && ' yatan hasta sayısını'}
+                      {surveyType === 'acil'    && ' acil servis sayısını'}
+                      {surveyType === 'calisan' && ' personel sayısını'}
+                      {surveyType === 'diger'   && ' ilgili istatistikleri'}
+                      {' '}girin.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
