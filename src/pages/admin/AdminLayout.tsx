@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck } from 'lucide-react'
+import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck, TrendingUp } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
 import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
@@ -12,6 +12,7 @@ import AdminSurveyBuilder from './AdminSurveyBuilder'
 import AdminSurveyResults from './AdminSurveyResults'
 import AdminSettings from './AdminSettings'
 import AdminSurveyStatus from './AdminSurveyStatus'
+import AdminPeriodComparison from './AdminPeriodComparison'
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
@@ -34,6 +35,7 @@ export default function AdminLayout() {
   const navItems = [
     { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard', end: true },
     { to: '/admin/anketler', icon: FileText,        label: 'Anketler'         },
+    { to: '/admin/donemsel-karsilastirma', icon: TrendingUp, label: 'Dönemsel Karşılaştırma' },
     { to: '/admin/anket-durumu', icon: ClipboardCheck, label: 'Anket Durumu'   },
     { to: '/admin/ayarlar',  icon: Settings,        label: 'Kurum Ayarları'   },
   ]
@@ -119,6 +121,8 @@ export default function AdminLayout() {
             <Route path="ayarlar" element={<AdminSettings />} />
             {/* Survey Quotas / Status */}
             <Route path="anket-durumu" element={<AdminSurveyStatus />} />
+            {/* Period Comparison */}
+            <Route path="donemsel-karsilastirma" element={<AdminPeriodComparison />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>
