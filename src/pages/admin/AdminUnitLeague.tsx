@@ -93,8 +93,11 @@ export default function AdminUnitLeague() {
   // 1. Kuruma ait anketleri yükle
   useEffect(() => {
     const loadSurveys = async () => {
-      if (!tenant?.id) return
+      if (!tenant?.id) {
+        return
+      }
       setLoadingSurveys(true)
+      setError('')
       try {
         const { data, error: sErr } = await supabase
           .from('surveys')
@@ -114,7 +117,7 @@ export default function AdminUnitLeague() {
       }
     }
     loadSurveys()
-  }, [tenant])
+  }, [tenant?.id])
 
   // 2. Seçilen anketin birim bazlı verilerini çek ve hesapla
   useEffect(() => {
@@ -139,11 +142,41 @@ export default function AdminUnitLeague() {
         if (qErr) throw qErr
         const questions = questionsData || []
 
-        // Birim/Departman Sorusunu Bul
+        // Birim/Departman Sorusunu Bul (Daha seçici olalım)
         const unitQ = questions.find(q => {
           const t = q.title.toLowerCase()
-          return (q.type === 'radio' || q.type === 'checkbox') && 
-            (t.includes('birim') || t.includes('departman') || t.includes('görev') || t.includes('unvan') || t.includes('rol') || t.includes('servis') || t.includes('klinik'))
+          
+          if (q.type !== 'radio' && q.type !== 'checkbox') return false
+          
+          const hasKeyword = t.includes('birim') || 
+                            t.includes('departman') || 
+                            t.includes('görev') || 
+                            t.includes('unvan') || 
+                            t.includes('rol') || 
+                            t.includes('servis') || 
+                            t.includes('klinik') ||
+                            t.includes('bölüm') ||
+                            t.includes('hizmet aldığ')
+          
+          if (!hasKeyword) return false
+
+          // Seçenekleri Likert ifadeleri içermemeli (Memnuniyet veya Katılım soruları elenir)
+          if (q.options && Array.isArray(q.options)) {
+            const hasLikertOptions = q.options.some((opt: string) => {
+              const o = opt.toLowerCase()
+              return o.includes('katıl') || 
+                     o.includes('memnun') || 
+                     o.includes('iyi') || 
+                     o.includes('kötü') || 
+                     o.includes('kararsız') || 
+                     o.includes('orta') ||
+                     o === 'evet' || 
+                     o === 'hayır'
+            })
+            if (hasLikertOptions) return false
+          }
+          
+          return true
         })
 
         if (!unitQ || !unitQ.options || unitQ.options.length === 0) {
