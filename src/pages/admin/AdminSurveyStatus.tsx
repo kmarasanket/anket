@@ -32,10 +32,15 @@ function getPopulation(surveyType: string, tenant: any): number {
 // ─── Anket Türü Tespiti (Başlıktan Otomatik) ─────────────────────────────────
 function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
   const t = (title || '').toLowerCase()
-  if (t.includes('acil'))                                               return 'acil'
-  if (t.includes('ayaktan') || t.includes('poliklinik'))              return 'ayaktan'
-  if (t.includes('yatan'))                                              return 'yatan'
-  if (t.includes('çalışan') || t.includes('calisan') || t.includes('personel')) return 'calisan'
+    // Türkçe karakter normalizasyonu
+    .replace(/i̇/g, 'i').replace(/ı/g, 'i').replace(/ğ/g, 'g')
+    .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u')
+  if (t.includes('acil'))                                                        return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik'))                        return 'ayaktan'
+  if (t.includes('yatan'))                                                       return 'yatan'
+  if (t.includes('calisan') || t.includes('personel') || t.includes('calisma')
+    || t.includes('geri bildirim') || t.includes('geri_bildirim')
+    || t.includes('employee') || t.includes('staff'))                            return 'calisan'
   return 'diger'
 }
 
@@ -77,13 +82,15 @@ interface SurveyRow {
 }
 
 export default function AdminSurveyStatus() {
-  const { tenant } = useAuthStore()
+  const { tenant: authTenant, profile } = useAuthStore()
   const { addNotification } = useNotificationStore()
   const { showConfirm }     = useConfirmModalStore()
 
-  const [loading,       setLoading]       = useState(true)
-  const [surveys,       setSurveys]       = useState<SurveyRow[]>([])
-  const [monthlyMap,    setMonthlyMap]    = useState<Record<string, number>>({})
+  const [loading,    setLoading]    = useState(true)
+  const [surveys,    setSurveys]    = useState<SurveyRow[]>([])
+  const [monthlyMap, setMonthlyMap] = useState<Record<string, number>>({})
+  // Taze kurum istatistikleri — authStore stale olabilir, her load'da yeniden çek
+  const [tenant, setTenant] = useState<any>(authTenant)
 
   const now    = new Date()
   const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
@@ -91,21 +98,30 @@ export default function AdminSurveyStatus() {
 
   // ─── Veri Yükleme ─────────────────────────────────────────────────────────
   const load = async () => {
-    if (!tenant?.id) return
+    const tenantId = authTenant?.id || profile?.tenant_id
+    if (!tenantId) return
     setLoading(true)
     try {
-      // Anket listesi
+      // 1. Taze kurum istatistiklerini DB'den çek (authStore stale olabilir!)
+      const { data: freshTenant } = await httpFrom('tenants')
+        .select('id, name, total_staff, prev_year_outpatient, prev_year_inpatient, prev_year_emergency')
+        .eq('id', tenantId)
+        .single()
+        .execute()
+      if (freshTenant) setTenant(freshTenant)
+
+      // 2. Anket listesi
       const { data: surveyData, error } = await httpFrom('surveys')
         .select('id, title, slug, status, response_count, settings')
-        .eq('tenant_id', tenant.id)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .execute()
       if (error) throw error
       setSurveys(surveyData || [])
 
-      // Bu ayki katılım (RPC)
+      // 3. Bu ayki katılım (RPC)
       try {
-        const { data: rpcData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id })
+        const { data: rpcData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenantId })
         if (rpcData && Array.isArray(rpcData)) {
           const map: Record<string, number> = {}
           rpcData.forEach((r: any) => { map[r.survey_id] = r.completed_count ?? 0 })
@@ -121,7 +137,7 @@ export default function AdminSurveyStatus() {
     }
   }
 
-  useEffect(() => { load() }, [tenant?.id])
+  useEffect(() => { load() }, [authTenant?.id, profile?.tenant_id])
 
   // ─── Anket Aç/Kapat ───────────────────────────────────────────────────────
   const handleToggleStatus = (id: string, title: string, currentStatus: string) => {

@@ -39,10 +39,15 @@ function getPopulation(surveyType: string, tenant: any): number {
 // ─── Anket Türü Tespiti (Başlığa Göre) ───────────────────────────────────────
 function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
   const t = (title || '').toLowerCase()
-  if (t.includes('acil'))                                        return 'acil'
-  if (t.includes('ayaktan') || t.includes('poliklinik'))        return 'ayaktan'
-  if (t.includes('yatan'))                                       return 'yatan'
-  if (t.includes('çalışan') || t.includes('calisan') || t.includes('personel')) return 'calisan'
+    // Türkçe karakter normalizasyonu — büyük harf sonrası toLowerCase garantisi
+    .replace(/ı/g, 'i').replace(/ğ/g, 'g')
+    .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u')
+  if (t.includes('acil'))                                                   return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik'))                   return 'ayaktan'
+  if (t.includes('yatan'))                                                  return 'yatan'
+  if (t.includes('calisan') || t.includes('personel') || t.includes('calisma')
+    || t.includes('geri bildirim') || t.includes('geri_bildirim')
+    || t.includes('employee') || t.includes('staff'))                       return 'calisan'
   return 'diger'
 }
 
@@ -61,27 +66,38 @@ interface SurveyWithMonthly {
 }
 
 export default function AdminSurveysPage() {
-  const { tenant, profile } = useAuthStore()
-  const [surveys,       setSurveys]       = useState<any[]>([])
-  const [monthlyMap,    setMonthlyMap]    = useState<Record<string, number>>({})
-  const [loading,       setLoading]       = useState(true)
-  const [search,        setSearch]        = useState('')
-  const [shareModal,    setShareModal]    = useState<{ isOpen: boolean; link: string; title: string }>({
+  const { tenant: authTenant, profile } = useAuthStore()
+  const [surveys,    setSurveys]    = useState<any[]>([])
+  const [monthlyMap, setMonthlyMap] = useState<Record<string, number>>({})
+  const [loading,    setLoading]    = useState(true)
+  const [search,     setSearch]     = useState('')
+  const [shareModal, setShareModal] = useState<{ isOpen: boolean; link: string; title: string }>({
     isOpen: false, link: '', title: '',
   })
+  // Taze kurum istatistikleri — authStore stale olabilir
+  const [tenant, setTenant] = useState<any>(authTenant)
 
   const { addNotification } = useNotificationStore()
   const { showConfirm }     = useConfirmModalStore()
 
   // ─── Veri Yükleme ────────────────────────────────────────────────────────────
   const fetchSurveys = async () => {
-    if (!tenant?.id) return
+    const tenantId = authTenant?.id || profile?.tenant_id
+    if (!tenantId) return
     setLoading(true)
     try {
+      // 0. Taze kurum istatistiklerini çek
+      const { data: freshTenant } = await httpFrom('tenants')
+        .select('id, name, total_staff, prev_year_outpatient, prev_year_inpatient, prev_year_emergency')
+        .eq('id', tenantId)
+        .single()
+        .execute()
+      if (freshTenant) setTenant(freshTenant)
+
       // 1. Anket listesi
       const { data, error } = await httpFrom('surveys')
         .select('id,title,description,slug,status,created_at,response_count,settings')
-        .eq('tenant_id', tenant.id)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .execute()
       if (error) throw error
@@ -89,7 +105,7 @@ export default function AdminSurveysPage() {
 
       // 2. Bu ayki yanıt sayıları (RPC ile veya manuel hesapla)
       try {
-        const { data: quotaData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenant.id })
+        const { data: quotaData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenantId })
         if (quotaData && Array.isArray(quotaData)) {
           const map: Record<string, number> = {}
           quotaData.forEach((q: any) => { map[q.survey_id] = q.completed_count ?? 0 })

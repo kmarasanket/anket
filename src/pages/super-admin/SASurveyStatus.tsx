@@ -32,10 +32,15 @@ function getPopulation(surveyType: string, tenantData: any): number {
 // ─── Anket Türü Tespiti (Başlıktan Otomatik) ─────────────────────────────────
 function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
   const t = (title || '').toLowerCase()
-  if (t.includes('acil'))                                               return 'acil'
-  if (t.includes('ayaktan') || t.includes('poliklinik'))              return 'ayaktan'
-  if (t.includes('yatan'))                                              return 'yatan'
-  if (t.includes('çalışan') || t.includes('calisan') || t.includes('personel')) return 'calisan'
+    // Türkçe karakter normalizasyonu — büyük harf sonrası toLowerCase garantisi
+    .replace(/ı/g, 'i').replace(/ğ/g, 'g')
+    .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u')
+  if (t.includes('acil'))                                                   return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik'))                   return 'ayaktan'
+  if (t.includes('yatan'))                                                  return 'yatan'
+  if (t.includes('calisan') || t.includes('personel') || t.includes('calisma')
+    || t.includes('geri bildirim') || t.includes('geri_bildirim')
+    || t.includes('employee') || t.includes('staff'))                       return 'calisan'
   return 'diger'
 }
 
