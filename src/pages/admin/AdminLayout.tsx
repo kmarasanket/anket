@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck, TrendingUp, AlertTriangle, HelpCircle } from 'lucide-react'
+import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck, TrendingUp, AlertTriangle, HelpCircle, Trophy, Palette } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
 import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
@@ -14,6 +14,8 @@ const AdminSettings = lazy(() => import('./AdminSettings'))
 const AdminSurveyStatus = lazy(() => import('./AdminSurveyStatus'))
 const AdminPeriodComparison = lazy(() => import('./AdminPeriodComparison'))
 const AdminHelpPage = lazy(() => import('./AdminHelpPage'))
+const AdminUnitLeague = lazy(() => import('./AdminUnitLeague'))
+const AdminPosterDesigner = lazy(() => import('./AdminPosterDesigner'))
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
@@ -70,6 +72,8 @@ export default function AdminLayout() {
     { to: '/admin/anketler', icon: FileText,        label: 'Anketler'         },
     { to: '/admin/anket-durumu', icon: ClipboardCheck, label: 'Anket Durumu'   },
     { to: '/admin/donemsel-karsilastirma', icon: TrendingUp, label: 'Dönemsel Karşılaştırma' },
+    { to: '/admin/birim-ligi', icon: Trophy, label: 'Birim Analiz Ligi' },
+    { to: '/admin/afis-tasarim', icon: Palette, label: 'Afiş Tasarımı' },
     { to: '/admin/ayarlar',  icon: Settings,        label: 'Kurum Ayarları'   },
     { to: '/admin/yardim',   icon: HelpCircle,      label: 'Bilgi ve Yardım'  },
   ]
@@ -196,6 +200,10 @@ export default function AdminLayout() {
               <Route path="anket-durumu" element={<AdminSurveyStatus />} />
               {/* Period Comparison */}
               <Route path="donemsel-karsilastirma" element={<AdminPeriodComparison />} />
+              {/* Birim Analiz Ligi */}
+              <Route path="birim-ligi" element={<AdminUnitLeague />} />
+              {/* Afis Tasarim Sihirbazi */}
+              <Route path="afis-tasarim" element={<AdminPosterDesigner />} />
               {/* Help and Documentation */}
               <Route path="yardim" element={<AdminHelpPage />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
