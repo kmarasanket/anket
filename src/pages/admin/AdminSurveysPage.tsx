@@ -36,18 +36,39 @@ function getPopulation(surveyType: string, tenant: any): number {
   }
 }
 
-// ─── Anket Türü Tespiti (Başlığa Göre) ───────────────────────────────────────
+// ─── Türkçe karakter normalizasyonu (locale bağımsız) ────────────────────────────
+// toLowerCase() ÖNEM: Türk locale'de "I" → "ı" (noktasız) olabilir,
+// bu yüzden önce büyük/küçük dönüşümü yapıp sonra Türkçe özel karakterleri ASCII'ye çeviriyoruz.
+function normalizeTR(s: string): string {
+  return s
+    // Büyük Türkçe karakterleri küçült (Unicode code point ile)
+    .replace(/\u0130/g, 'i')   // İ (Büyük dotted I) → i
+    .replace(/\u0049/g, '\u0131') // I (standart büyük I) → ı (Türkçe)
+    .replace(/\u011e/g, 'g')   // \u011E (GĞ) → g
+    .replace(/\u015e/g, 's')   // \u015E (Ş) → s
+    .replace(/\u00c7/g, 'c')   // \u00C7 (Ç) → c
+    .replace(/\u00d6/g, 'o')   // \u00D6 (Ö) → o
+    .replace(/\u00dc/g, 'u')   // \u00DC (Ü) → u
+    .toLowerCase()              // Kalan karakterleri küçült
+    // Küçük Türkçe özel karakterleri ASCII'ye çevir
+    .replace(/\u0131/g, 'i')   // ı (noktasız küçük i) → i
+    .replace(/\u011f/g, 'g')   // \u011F (ğ) → g
+    .replace(/\u015f/g, 's')   // \u015F (ş) → s
+    .replace(/\u00e7/g, 'c')   // \u00E7 (ç) → c
+    .replace(/\u00f6/g, 'o')   // \u00F6 (ö) → o
+    .replace(/\u00fc/g, 'u')   // \u00FC (ü) → u
+}
+
+// ─── Anket Türü Tespiti (Başlıktan Otomatik) ─────────────────────────────────
 function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
-  const t = (title || '').toLowerCase()
-    // Türkçe karakter normalizasyonu — büyük harf sonrası toLowerCase garantisi
-    .replace(/ı/g, 'i').replace(/ğ/g, 'g')
-    .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u')
-  if (t.includes('acil'))                                                   return 'acil'
-  if (t.includes('ayaktan') || t.includes('poliklinik'))                   return 'ayaktan'
-  if (t.includes('yatan'))                                                  return 'yatan'
+  const t = normalizeTR(title || '')
+  // Öncelik: 'yatan' 'ayaktan' öncesinde gelmemeli (ikisi de 'atan' içeriyor)
+  if (t.includes('acil'))                                                         return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik') || t.includes('ayakta')) return 'ayaktan'
+  if (t.includes('yatan'))                                                         return 'yatan'
   if (t.includes('calisan') || t.includes('personel') || t.includes('calisma')
     || t.includes('geri bildirim') || t.includes('geri_bildirim')
-    || t.includes('employee') || t.includes('staff'))                       return 'calisan'
+    || t.includes('employee') || t.includes('staff'))                              return 'calisan'
   return 'diger'
 }
 

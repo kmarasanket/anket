@@ -29,18 +29,34 @@ function getPopulation(surveyType: string, tenant: any): number {
   }
 }
 
+// ─── Türkçe karakter normalizasyonu (locale bağımsız) ────────────────────────────
+function normalizeTR(s: string): string {
+  return s
+    .replace(/\u0130/g, 'i')      // İ (Büyük dotted I) → i
+    .replace(/\u0049/g, '\u0131') // I (standart büyük I) → ı
+    .replace(/\u011e/g, 'g')      // GĞ → g
+    .replace(/\u015e/g, 's')      // Ş → s
+    .replace(/\u00c7/g, 'c')      // Ç → c
+    .replace(/\u00d6/g, 'o')      // Ö → o
+    .replace(/\u00dc/g, 'u')      // Ü → u
+    .toLowerCase()
+    .replace(/\u0131/g, 'i')      // ı → i
+    .replace(/\u011f/g, 'g')      // ğ → g
+    .replace(/\u015f/g, 's')      // ş → s
+    .replace(/\u00e7/g, 'c')      // ç → c
+    .replace(/\u00f6/g, 'o')      // ö → o
+    .replace(/\u00fc/g, 'u')      // ü → u
+}
+
 // ─── Anket Türü Tespiti (Başlıktan Otomatik) ─────────────────────────────────
 function detectSurveyType(title: string): 'ayaktan' | 'yatan' | 'acil' | 'calisan' | 'diger' {
-  const t = (title || '').toLowerCase()
-    // Türkçe karakter normalizasyonu
-    .replace(/i̇/g, 'i').replace(/ı/g, 'i').replace(/ğ/g, 'g')
-    .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u')
-  if (t.includes('acil'))                                                        return 'acil'
-  if (t.includes('ayaktan') || t.includes('poliklinik'))                        return 'ayaktan'
-  if (t.includes('yatan'))                                                       return 'yatan'
+  const t = normalizeTR(title || '')
+  if (t.includes('acil'))                                                         return 'acil'
+  if (t.includes('ayaktan') || t.includes('poliklinik') || t.includes('ayakta')) return 'ayaktan'
+  if (t.includes('yatan'))                                                         return 'yatan'
   if (t.includes('calisan') || t.includes('personel') || t.includes('calisma')
     || t.includes('geri bildirim') || t.includes('geri_bildirim')
-    || t.includes('employee') || t.includes('staff'))                            return 'calisan'
+    || t.includes('employee') || t.includes('staff'))                              return 'calisan'
   return 'diger'
 }
 
