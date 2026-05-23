@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, BarChart3,
@@ -8,16 +8,16 @@ import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
 import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
 
-// Pages
-import SADashboard from './SADashboard'
-import SATenantsPage from './SATenantsPage'
-import SAUsersPage from './SAUsersPage'
-import SAReportsPage from './SAReportsPage'
-import SASurveysPage from './SASurveysPage'
-import SASurveyStatus from './SASurveyStatus'
-import AdminSurveyBuilder from '../admin/AdminSurveyBuilder'
-import AdminSurveyResults from '../admin/AdminSurveyResults'
-import SAComparisonPage from './SAComparisonPage'
+// Pages (Lazy Loaded)
+const SADashboard = lazy(() => import('./SADashboard'))
+const SATenantsPage = lazy(() => import('./SATenantsPage'))
+const SAUsersPage = lazy(() => import('./SAUsersPage'))
+const SAReportsPage = lazy(() => import('./SAReportsPage'))
+const SASurveysPage = lazy(() => import('./SASurveysPage'))
+const SASurveyStatus = lazy(() => import('./SASurveyStatus'))
+const AdminSurveyBuilder = lazy(() => import('../admin/AdminSurveyBuilder'))
+const AdminSurveyResults = lazy(() => import('../admin/AdminSurveyResults'))
+const SAComparisonPage = lazy(() => import('./SAComparisonPage'))
 
 const navItems = [
   { to: '/super-admin',              icon: LayoutDashboard, label: 'Dashboard',       end: true },
@@ -106,18 +106,20 @@ export default function SuperAdminLayout() {
       {/* Main content */}
       <main className="flex-1 ml-[var(--sidebar-width)] min-h-screen">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-          <Routes>
-            <Route index element={<SADashboard />} />
-            <Route path="kurumlar" element={<SATenantsPage />} />
-            <Route path="anketler" element={<SASurveysPage />} />
-            <Route path="kota" element={<SASurveyStatus />} />
-            <Route path="karsilastirma" element={<SAComparisonPage />} />
-            <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
-            <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
-            <Route path="kullanicilar" element={<SAUsersPage />} />
-            <Route path="raporlar" element={<SAReportsPage />} />
-            <Route path="*" element={<Navigate to="/super-admin" replace />} />
-          </Routes>
+          <Suspense fallback={<div className="p-12 text-center text-dark-400">Yükleniyor...</div>}>
+            <Routes>
+              <Route index element={<SADashboard />} />
+              <Route path="kurumlar" element={<SATenantsPage />} />
+              <Route path="anketler" element={<SASurveysPage />} />
+              <Route path="kota" element={<SASurveyStatus />} />
+              <Route path="karsilastirma" element={<SAComparisonPage />} />
+              <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
+              <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
+              <Route path="kullanicilar" element={<SAUsersPage />} />
+              <Route path="raporlar" element={<SAReportsPage />} />
+              <Route path="*" element={<Navigate to="/super-admin" replace />} />
+            </Routes>
+          </Suspense>
         </div>
       </main>
     </div>

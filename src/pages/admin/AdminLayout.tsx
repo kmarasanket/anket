@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, FileText, Settings, LogOut, ChevronRight, Building2, Key, ClipboardCheck, TrendingUp, AlertTriangle, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
 import ChangePasswordModal from '../../components/auth/ChangePasswordModal'
 
-// Pages
-import AdminDashboard from './AdminDashboard'
-import AdminSurveysPage from './AdminSurveysPage'
-import AdminSurveyBuilder from './AdminSurveyBuilder'
-import AdminSurveyResults from './AdminSurveyResults'
-import AdminSettings from './AdminSettings'
-import AdminSurveyStatus from './AdminSurveyStatus'
-import AdminPeriodComparison from './AdminPeriodComparison'
-import AdminHelpPage from './AdminHelpPage'
+// Pages (Lazy Loaded)
+const AdminDashboard = lazy(() => import('./AdminDashboard'))
+const AdminSurveysPage = lazy(() => import('./AdminSurveysPage'))
+const AdminSurveyBuilder = lazy(() => import('./AdminSurveyBuilder'))
+const AdminSurveyResults = lazy(() => import('./AdminSurveyResults'))
+const AdminSettings = lazy(() => import('./AdminSettings'))
+const AdminSurveyStatus = lazy(() => import('./AdminSurveyStatus'))
+const AdminPeriodComparison = lazy(() => import('./AdminPeriodComparison'))
+const AdminHelpPage = lazy(() => import('./AdminHelpPage'))
 
 export default function AdminLayout() {
   const { profile, tenant, logout } = useAuthStore()
@@ -183,22 +183,24 @@ export default function AdminLayout() {
       {/* Main content */}
       <main className="flex-1 ml-[var(--sidebar-width)] min-h-screen">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-          <Routes>
-            <Route index element={<AdminDashboard />} />
-            <Route path="anketler" element={<AdminSurveysPage />} />
-            <Route path="anketler/yeni" element={<AdminSurveyBuilder />} />
-            <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
-            <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
-            {/* Settings */}
-            <Route path="ayarlar" element={<AdminSettings />} />
-            {/* Survey Quotas / Status */}
-            <Route path="anket-durumu" element={<AdminSurveyStatus />} />
-            {/* Period Comparison */}
-            <Route path="donemsel-karsilastirma" element={<AdminPeriodComparison />} />
-            {/* Help and Documentation */}
-            <Route path="yardim" element={<AdminHelpPage />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
-          </Routes>
+          <Suspense fallback={<div className="p-12 text-center text-dark-400">Yükleniyor...</div>}>
+            <Routes>
+              <Route index element={<AdminDashboard />} />
+              <Route path="anketler" element={<AdminSurveysPage />} />
+              <Route path="anketler/yeni" element={<AdminSurveyBuilder />} />
+              <Route path="anketler/:id/duzenle" element={<AdminSurveyBuilder />} />
+              <Route path="anketler/:id/sonuclar" element={<AdminSurveyResults />} />
+              {/* Settings */}
+              <Route path="ayarlar" element={<AdminSettings />} />
+              {/* Survey Quotas / Status */}
+              <Route path="anket-durumu" element={<AdminSurveyStatus />} />
+              {/* Period Comparison */}
+              <Route path="donemsel-karsilastirma" element={<AdminPeriodComparison />} />
+              {/* Help and Documentation */}
+              <Route path="yardim" element={<AdminHelpPage />} />
+              <Route path="*" element={<Navigate to="/admin" replace />} />
+            </Routes>
+          </Suspense>
         </div>
       </main>
     </div>
