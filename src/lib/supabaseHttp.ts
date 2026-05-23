@@ -144,6 +144,14 @@ export function httpFrom(table: string) {
         url += `&${col}=in.(${vals.map(v => encodeURIComponent(v)).join(',')})`
         return builder
       },
+      gte(col: string, val: string) {
+        url += `&${col}=gte.${encodeURIComponent(val)}`
+        return builder
+      },
+      lte(col: string, val: string) {
+        url += `&${col}=lte.${encodeURIComponent(val)}`
+        return builder
+      },
       order(col: string, opts?: { ascending?: boolean }) {
         url += `&order=${col}.${opts?.ascending === false ? 'desc' : 'asc'}`
         return builder
