@@ -69,6 +69,76 @@ const stripQuestionPrefix = (title: string): string => {
   return title.replace(/^\d+[-.)\s]+\s*/, '').trim()
 }
 
+const normalizeUnitName = (name: string): string => {
+  const upper = name.toLocaleUpperCase('tr-TR').trim()
+  
+  if (upper === 'ACİL' || upper === 'ACIL' || upper.includes('ACİL') || upper.includes('ACIL')) {
+    return 'ACİL SERVİS'
+  }
+  if (upper.includes('DAHİLİYE') || upper.includes('DAHILIYE')) {
+    return 'DAHİLİYE SERVİSİ'
+  }
+  if (upper.includes('YOĞUN BAKIM') || upper.includes('YOGUN BAKIM') || upper.includes('YOĞUNBAKIM')) {
+    return 'YOĞUN BAKIM'
+  }
+  if (upper.includes('GÖZ')) {
+    return 'GÖZ POLİKLİNİĞİ'
+  }
+  if (upper.includes('KARDİYO') || upper.includes('KARDIYO')) {
+    return 'KARDİYOLOJİ'
+  }
+  if (upper.includes('GENEL CERRAHİ') || upper.includes('GENEL CERRAHI')) {
+    return 'GENEL CERRAHİ'
+  }
+  if (upper.includes('ÇOCUK') || upper.includes('COCUK') || upper.includes('PEDİATRİ') || upper.includes('PEDIATRI')) {
+    return 'ÇOCUK SAĞLIĞI VE HASTALIKLARI'
+  }
+  if (upper.includes('ORTOPEDİ') || upper.includes('ORTOPEDI')) {
+    return 'ORTOPEDİ VE TRAVMATOLOJİ'
+  }
+  if (upper.includes('KADIN DOĞUM') || upper.includes('KADIN HAST') || upper.includes('KADINDOGUM')) {
+    return 'KADIN HASTALIKLARI VE DOĞUM'
+  }
+  if (upper.includes('ÜROLOJİ') || upper.includes('UROLOJI')) {
+    return 'ÜROLOJİ'
+  }
+  if (upper.includes('KBB') || upper.includes('KULAK BURUN') || upper.includes('BOĞAZ')) {
+    return 'KULAK BURUN BOĞAZ (KBB)'
+  }
+  if (upper.includes('NÖROLOJİ') || upper.includes('NOROLOJI')) {
+    return 'NÖROLOJİ'
+  }
+  if (upper.includes('FİZİK') || upper.includes('FIZIK') || upper.includes('FTR')) {
+    return 'FİZİK TEDAVİ VE REHABİLİTASYON'
+  }
+  if (upper.includes('GÖĞÜS') || upper.includes('GOGUS')) {
+    return 'GÖĞÜS HASTALIKLARI'
+  }
+  if (upper.includes('ENFEKSİYON') || upper.includes('ENFEKSIYON') || upper.includes('İNTANİYE') || upper.includes('INTANIYE')) {
+    return 'ENFEKSİYON HASTALIKLARI'
+  }
+  if (upper.includes('PSİKİYATRİ') || upper.includes('PSIKIYATRI') || upper.includes('RUH SAĞLIĞI')) {
+    return 'RUH SAĞLIĞI VE HASTALIKLARI'
+  }
+  if (upper.includes('AMELİYATHANE') || upper.includes('AMELIYATHANE')) {
+    return 'AMELİYATHANE'
+  }
+  if (upper.includes('RADYOLOJİ') || upper.includes('RADYOLOJI') || upper.includes('RÖNTGEN') || upper.includes('RONTGEN')) {
+    return 'RADYOLOJİ'
+  }
+  if (upper.includes('LABORATUVAR') || upper.includes('LABORATUAR') || upper === 'LAB') {
+    return 'LABORATUVAR'
+  }
+  if (upper.includes('ECZANE')) {
+    return 'ECZANE'
+  }
+  if (upper.includes('İDARİ') || upper.includes('IDARI') || upper.includes('YÖNETİM') || upper.includes('YONETIM') || upper.includes('BAŞHEKİM') || upper.includes('BASHEKIM')) {
+    return 'İDARİ VE MALİ İŞLER'
+  }
+  
+  return upper
+}
+
 export default function AdminUnitLeague() {
   const { tenant } = useAuthStore()
   
@@ -256,7 +326,11 @@ export default function AdminUnitLeague() {
         // Dinamik olarak seçenekleri çıkaralım (text sorusu ise yanıtları tarayarak, radio/checkbox ise q.options kullanarak)
         let unitOptions: string[] = []
         if (unitQ.options && Array.isArray(unitQ.options) && unitQ.options.length > 0) {
-          unitOptions = unitQ.options
+          const uniqueAnswers = new Set<string>()
+          unitQ.options.forEach((opt: string) => {
+            uniqueAnswers.add(normalizeUnitName(opt))
+          })
+          unitOptions = Array.from(uniqueAnswers).sort()
         } else {
           const uniqueAnswers = new Set<string>()
           responses.forEach((r: any) => {
@@ -264,7 +338,7 @@ export default function AdminUnitLeague() {
             if (ans) {
               const val = getAnswerValue(ans.answer).trim()
               if (val && val !== '-' && val !== '') {
-                uniqueAnswers.add(val.toLocaleUpperCase('tr-TR'))
+                uniqueAnswers.add(normalizeUnitName(val))
               }
             }
           })
@@ -289,8 +363,8 @@ export default function AdminUnitLeague() {
           if (uAns) {
             const rawVal = getAnswerValue(uAns.answer).trim()
             if (rawVal && rawVal !== '-' && rawVal !== '') {
-              const rawValUpper = rawVal.toLocaleUpperCase('tr-TR')
-              const matchedUnit = unitOptions.find((opt: string) => opt.toLocaleUpperCase('tr-TR').trim() === rawValUpper)
+              const normalizedVal = normalizeUnitName(rawVal)
+              const matchedUnit = unitOptions.find((opt: string) => opt === normalizedVal)
               if (matchedUnit) {
                 statsMap[matchedUnit].responses.push(r)
               }
