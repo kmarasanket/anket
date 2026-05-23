@@ -95,6 +95,7 @@ export default function SASurveyStatus() {
   const [surveys,     setSurveys]     = useState<SurveyItem[]>([])
   const [tenants,     setTenants]     = useState<{ id: string; name: string }[]>([])
   const [monthlyMap,  setMonthlyMap]  = useState<Record<string, number>>({})
+  const [totalMap,    setTotalMap]    = useState<Record<string, number>>({})
   const [filterTenant, setFilterTenant] = useState('')
   const [filterType,   setFilterType]   = useState('')
   const [search,        setSearch]      = useState('')
@@ -123,17 +124,38 @@ export default function SASurveyStatus() {
         .execute()
       setTenants(tenantData || [])
 
-      // 3. Bu ayki katılım (RPC — tüm kurumlar)
-      try {
-        const { data: rpcData } = await httpRpc('get_tenant_survey_status')
-        if (rpcData && Array.isArray(rpcData)) {
-          const map: Record<string, number> = {}
-          rpcData.forEach((r: any) => { map[r.survey_id] = r.completed_count ?? 0 })
-          setMonthlyMap(map)
-        }
-      } catch {
-        // RPC yoksa response_count kullan
-      }
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      const monthStart = new Date(y, m, 1).toISOString()
+      const monthEnd   = new Date(y, m + 1, 0, 23, 59, 59, 999).toISOString()
+
+      // 3. Bu ayki tamamlanan sayı — responses tablosundan (tüm kurumlar)
+      const { data: monthlyData } = await httpFrom('responses')
+        .select('survey_id')
+        .eq('is_complete', 'true')
+        .gte('completed_at', monthStart)
+        .lte('completed_at', monthEnd)
+        .execute()
+
+      const mMap: Record<string, number> = {}
+      ;(monthlyData || []).forEach((r: any) => {
+        mMap[r.survey_id] = (mMap[r.survey_id] || 0) + 1
+      })
+      setMonthlyMap(mMap)
+
+      // 4. Toplam tamamlanan sayı — Sonuçlar sayfasıyla aynı kaynak
+      const { data: totalData } = await httpFrom('responses')
+        .select('survey_id')
+        .eq('is_complete', 'true')
+        .execute()
+
+      const tMap: Record<string, number> = {}
+      ;(totalData || []).forEach((r: any) => {
+        tMap[r.survey_id] = (tMap[r.survey_id] || 0) + 1
+      })
+      setTotalMap(tMap)
+
     } catch (err: any) {
       addNotification('Veriler yüklenemedi: ' + (err.message || ''), 'error')
     } finally {
@@ -186,12 +208,12 @@ export default function SASurveyStatus() {
     const type = detectSurveyType(s.title)
     return getPopulation(type, s.tenants) > 0
   })
-  const totalThisMonth  = withData.reduce((a, s) => a + (monthlyMap[s.id] ?? s.response_count ?? 0), 0)
+  const totalThisMonth  = withData.reduce((a, s) => a + (monthlyMap[s.id] ?? 0), 0)
   const reached         = withData.filter(s => {
     const type    = detectSurveyType(s.title)
     const N       = getPopulation(type, s.tenants)
     const target  = Math.ceil(cochran(N) / 12)
-    const done    = monthlyMap[s.id] ?? s.response_count ?? 0
+    const done    = monthlyMap[s.id] ?? 0
     return target > 0 && done >= target
   }).length
   const avgPct = withData.length > 0
@@ -199,7 +221,7 @@ export default function SASurveyStatus() {
         const type   = detectSurveyType(s.title)
         const N      = getPopulation(type, s.tenants)
         const target = Math.ceil(cochran(N) / 12)
-        const done   = monthlyMap[s.id] ?? s.response_count ?? 0
+        const done   = monthlyMap[s.id] ?? 0
         return acc + (target > 0 ? (done / target) * 100 : 0)
       }, 0) / withData.length)
     : 0
@@ -307,7 +329,8 @@ export default function SASurveyStatus() {
             const N          = getPopulation(surveyType, survey.tenants)
             const n          = cochran(N)
             const target     = n > 0 ? Math.ceil(n / 12) : 0
-            const done       = monthlyMap[survey.id] ?? survey.response_count ?? 0
+            const done       = monthlyMap[survey.id] ?? 0
+            const totalDone  = totalMap[survey.id] ?? 0
             const pct        = target > 0 ? Math.min(Math.round((done / target) * 100), 100) : 0
             const hasData    = N > 0 && target > 0
 
@@ -374,12 +397,13 @@ export default function SASurveyStatus() {
                 </div>
 
                 {/* Metrik Kartlar */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                   {[
-                    { label: 'Evren (N)',      value: N > 0      ? N.toLocaleString('tr-TR')      : '—', sub: 'Kurum istatistiği' },
-                    { label: 'Örneklem (n)',   value: n > 0      ? n.toLocaleString('tr-TR')      : '—', sub: 'Cochran formülü'   },
+                    { label: 'Evren (N)',       value: N > 0      ? N.toLocaleString('tr-TR')      : '—', sub: 'Kurum istatistiği' },
+                    { label: 'Örneklem (n)',    value: n > 0      ? n.toLocaleString('tr-TR')      : '—', sub: 'Cochran formülü'   },
                     { label: 'Aylık Hedef',    value: target > 0 ? target.toLocaleString('tr-TR') : '—', sub: 'n ÷ 12'           },
                     { label: 'Bu Ay Katılım',  value: done.toLocaleString('tr-TR'),                       sub: monthLabel, highlight: true },
+                    { label: 'Toplam Katılım', value: totalDone.toLocaleString('tr-TR'),                   sub: 'Tüm zamanlar',    total: true    },
                     { label: 'Kalan / Aşım',
                       value: !hasData ? '—'
                         : done >= target
@@ -388,11 +412,12 @@ export default function SASurveyStatus() {
                       sub:   !hasData ? 'Veri yok' : done >= target ? 'Kota aşımı' : 'Kalan',
                       success: hasData && done >= target,
                     },
-                  ].map(({ label, value, sub, highlight, success }) => (
+                  ].map(({ label, value, sub, highlight, total, success }: any) => (
                     <div key={label} className="bg-dark-900/50 p-4 rounded-xl border border-dark-800/50">
                       <p className="text-xs text-dark-500 mb-1">{label}</p>
                       <p className={`text-xl font-bold ${
                         success   ? 'text-emerald-400'
+                        : total     ? 'text-amber-400'
                         : highlight ? 'text-primary-400'
                         : 'text-dark-100'
                       }`}>

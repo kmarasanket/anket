@@ -90,12 +90,13 @@ export default function AdminSurveysPage() {
   const { tenant: authTenant, profile } = useAuthStore()
   const [surveys,    setSurveys]    = useState<any[]>([])
   const [monthlyMap, setMonthlyMap] = useState<Record<string, number>>({})
+  // Toplam tamamlanan sayı — Sonuçlar sayfasıyla aynı kaynak
+  const [totalMap,   setTotalMap]   = useState<Record<string, number>>({})
   const [loading,    setLoading]    = useState(true)
   const [search,     setSearch]     = useState('')
   const [shareModal, setShareModal] = useState<{ isOpen: boolean; link: string; title: string }>({
     isOpen: false, link: '', title: '',
   })
-  // Taze kurum istatistikleri — authStore stale olabilir
   const [tenant, setTenant] = useState<any>(authTenant)
 
   const { addNotification } = useNotificationStore()
@@ -124,17 +125,40 @@ export default function AdminSurveysPage() {
       if (error) throw error
       setSurveys(data || [])
 
-      // 2. Bu ayki yanıt sayıları (RPC ile veya manuel hesapla)
-      try {
-        const { data: quotaData } = await httpRpc('get_tenant_survey_status', { p_tenant_id: tenantId })
-        if (quotaData && Array.isArray(quotaData)) {
-          const map: Record<string, number> = {}
-          quotaData.forEach((q: any) => { map[q.survey_id] = q.completed_count ?? 0 })
-          setMonthlyMap(map)
-        }
-      } catch {
-        // RPC yoksa response_count kullan
-      }
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      const monthStart = new Date(y, m, 1).toISOString()
+      const monthEnd   = new Date(y, m + 1, 0, 23, 59, 59, 999).toISOString()
+
+      // 2. Bu ayki tamamlanan sayı (kota takibi için)
+      const { data: monthlyData } = await httpFrom('responses')
+        .select('survey_id')
+        .eq('tenant_id', tenantId)
+        .eq('is_complete', 'true')
+        .gte('completed_at', monthStart)
+        .lte('completed_at', monthEnd)
+        .execute()
+
+      const mMap: Record<string, number> = {}
+      ;(monthlyData || []).forEach((r: any) => {
+        mMap[r.survey_id] = (mMap[r.survey_id] || 0) + 1
+      })
+      setMonthlyMap(mMap)
+
+      // 3. Toplam tamamlanan sayı — Sonuçlar sayfasıyla AYNI kaynak (her yerde tutarlı)
+      const { data: totalData } = await httpFrom('responses')
+        .select('survey_id')
+        .eq('tenant_id', tenantId)
+        .eq('is_complete', 'true')
+        .execute()
+
+      const tMap: Record<string, number> = {}
+      ;(totalData || []).forEach((r: any) => {
+        tMap[r.survey_id] = (tMap[r.survey_id] || 0) + 1
+      })
+      setTotalMap(tMap)
+
     } catch {
       addNotification('Anketler yüklenirken bir hata oluştu.', 'error')
     } finally {
@@ -142,7 +166,8 @@ export default function AdminSurveysPage() {
     }
   }
 
-  useEffect(() => { if (tenant?.id) fetchSurveys() }, [tenant?.id])
+  useEffect(() => { fetchSurveys() }, [authTenant?.id, profile?.tenant_id])
+
 
   const filtered = surveys.filter(s =>
     s.title.toLowerCase().includes(search.toLowerCase())
@@ -214,13 +239,16 @@ export default function AdminSurveysPage() {
 
   // ─── Kota Hesaplama (Otomatik — Kurum Ayarlarından) ──────────────────────────
   function computeQuota(survey: any) {
-    const surveyType    = detectSurveyType(survey.title)
-    const N             = getPopulation(surveyType, tenant)
-    const n             = cochran(N)
-    const monthlyTarget = n > 0 ? Math.ceil(n / 12) : 0
-    const thisMonthCount = monthlyMap[survey.id] ?? (survey.response_count ?? 0)
-    const pct           = monthlyTarget > 0 ? Math.min(Math.round((thisMonthCount / monthlyTarget) * 100), 100) : 0
-    return { surveyType, N, n, monthlyTarget, thisMonthCount, pct }
+    const surveyType     = detectSurveyType(survey.title)
+    const N              = getPopulation(surveyType, tenant)
+    const n              = cochran(N)
+    const monthlyTarget  = n > 0 ? Math.ceil(n / 12) : 0
+    // Bu ayki sayı — responses tablosundan (kota takibi)
+    const thisMonthCount = monthlyMap[survey.id] ?? 0
+    // Toplam sayı — responses tablosundan (Sonuçlar sayfasıyla aynı)
+    const totalCount     = totalMap[survey.id] ?? 0
+    const pct            = monthlyTarget > 0 ? Math.min(Math.round((thisMonthCount / monthlyTarget) * 100), 100) : 0
+    return { surveyType, N, n, monthlyTarget, thisMonthCount, totalCount, pct }
   }
 
   // ─── JSX ─────────────────────────────────────────────────────────────────────
@@ -389,7 +417,7 @@ export default function AdminSurveysPage() {
                       <span>·</span>
                       <span>Oluşturulma: {formatDate(survey.created_at)}</span>
                       <span>·</span>
-                      <span>{survey.response_count ?? 0} yanıt</span>
+                      <span>{totalMap[survey.id] ?? survey.response_count ?? 0} yanıt</span>
                     </div>
                   </div>
 
