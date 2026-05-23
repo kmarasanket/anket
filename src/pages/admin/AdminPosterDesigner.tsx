@@ -58,7 +58,10 @@ export default function AdminPosterDesigner() {
   // 1. Kuruma ait anketleri yükle
   useEffect(() => {
     const loadSurveys = async () => {
-      if (!tenant?.id) return
+      if (!tenant?.id) {
+        setLoadingSurveys(false)
+        return
+      }
       setLoadingSurveys(true)
       try {
         const { data, error: sErr } = await supabase
@@ -80,7 +83,7 @@ export default function AdminPosterDesigner() {
       }
     }
     loadSurveys()
-  }, [tenant])
+  }, [tenant?.id])
 
   const selectedSurvey = surveys.find(s => s.id === selectedSurveyId)
   const selectedPalette = PALETTES.find(p => p.id === paletteId) || PALETTES[0]

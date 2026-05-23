@@ -94,6 +94,7 @@ export default function AdminUnitLeague() {
   useEffect(() => {
     const loadSurveys = async () => {
       if (!tenant?.id) {
+        setLoadingSurveys(false)
         return
       }
       setLoadingSurveys(true)
@@ -143,10 +144,9 @@ export default function AdminUnitLeague() {
         const questions = questionsData || []
 
         // Birim/Departman Sorusunu Bul (Daha seçici olalım)
-        const unitQ = questions.find(q => {
-          const t = q.title.toLowerCase()
-          
+        let unitQ = questions.find(q => {
           if (q.type !== 'radio' && q.type !== 'checkbox') return false
+          const t = q.title.toLocaleLowerCase('tr-TR')
           
           const hasKeyword = t.includes('birim') || 
                             t.includes('departman') || 
@@ -163,7 +163,7 @@ export default function AdminUnitLeague() {
           // Seçenekleri Likert ifadeleri içermemeli (Memnuniyet veya Katılım soruları elenir)
           if (q.options && Array.isArray(q.options)) {
             const hasLikertOptions = q.options.some((opt: string) => {
-              const o = opt.toLowerCase()
+              const o = opt.toLocaleLowerCase('tr-TR')
               return o.includes('katıl') || 
                      o.includes('memnun') || 
                      o.includes('iyi') || 
@@ -179,7 +179,27 @@ export default function AdminUnitLeague() {
           return true
         })
 
-        if (!unitQ || !unitQ.options || unitQ.options.length === 0) {
+        // Eğer radio/checkbox olarak bulunamadıysa, text tipindeki soruları ara (örneğin Çalıştığınız Bölüm, Yattığı Klinik vb.)
+        if (!unitQ) {
+          unitQ = questions.find(q => {
+            if (q.type !== 'text') return false
+            const t = q.title.toLocaleLowerCase('tr-TR')
+            
+            const hasKeyword = t.includes('birim') || 
+                              t.includes('departman') || 
+                              t.includes('görev') || 
+                              t.includes('unvan') || 
+                              t.includes('rol') || 
+                              t.includes('servis') || 
+                              t.includes('klinik') ||
+                              t.includes('bölüm') ||
+                              t.includes('hizmet aldığ')
+            
+            return hasKeyword
+          })
+        }
+
+        if (!unitQ) {
           setHasUnitQuestion(false)
           setLoadingData(false)
           return
@@ -188,9 +208,9 @@ export default function AdminUnitLeague() {
         setUnitQuestionTitle(unitQ.title)
 
         // Diğer demografik soruları hariç tutalım (Cinsiyet, Yaş vb.)
-        const genderQ = questions.find(q => q.title.toLowerCase().includes('cinsiyet'))
-        const ageQ = questions.find(q => q.title.toLowerCase().includes('yaş'))
-        const eduQ = questions.find(q => q.title.toLowerCase().includes('eğitim') || q.title.toLowerCase().includes('öğrenim'))
+        const genderQ = questions.find(q => q.title.toLocaleLowerCase('tr-TR').includes('cinsiyet'))
+        const ageQ = questions.find(q => q.title.toLocaleLowerCase('tr-TR').includes('yaş'))
+        const eduQ = questions.find(q => q.title.toLocaleLowerCase('tr-TR').includes('eğitim') || q.title.toLocaleLowerCase('tr-TR').includes('öğrenim'))
 
         // Genel memnuniyet hesaplama seçenek setini tespit et (Likert Ölçek)
         const optionCounts: Record<string, { count: number, options: string[] }> = {}
@@ -233,7 +253,25 @@ export default function AdminUnitLeague() {
         if (rErr) throw rErr
         const responses = responsesData || []
 
-        if (responses.length === 0) {
+        // Dinamik olarak seçenekleri çıkaralım (text sorusu ise yanıtları tarayarak, radio/checkbox ise q.options kullanarak)
+        let unitOptions: string[] = []
+        if (unitQ.options && Array.isArray(unitQ.options) && unitQ.options.length > 0) {
+          unitOptions = unitQ.options
+        } else {
+          const uniqueAnswers = new Set<string>()
+          responses.forEach((r: any) => {
+            const ans = r.response_answers?.find((a: any) => a.question_id === unitQ.id)
+            if (ans) {
+              const val = getAnswerValue(ans.answer).trim()
+              if (val && val !== '-' && val !== '') {
+                uniqueAnswers.add(val.toLocaleUpperCase('tr-TR'))
+              }
+            }
+          })
+          unitOptions = Array.from(uniqueAnswers).sort()
+        }
+
+        if (responses.length === 0 || unitOptions.length === 0) {
           setUnitListStats([])
           setLoadingData(false)
           return
@@ -241,7 +279,7 @@ export default function AdminUnitLeague() {
 
         // Birim bazında gruplayıp skor hesaplama
         const statsMap: Record<string, { responses: any[] }> = {}
-        unitQ.options.forEach((opt: string) => {
+        unitOptions.forEach((opt: string) => {
           statsMap[opt] = { responses: [] }
         })
 
@@ -249,12 +287,13 @@ export default function AdminUnitLeague() {
         responses.forEach((r: any) => {
           const uAns = r.response_answers?.find((a: any) => a.question_id === unitQ.id)
           if (uAns) {
-            const rawVal = getAnswerValue(uAns.answer)
-            const matchedUnit = unitQ.options.find((opt: string) => opt.toLowerCase().trim() === rawVal.toLowerCase().trim())
-            if (matchedUnit) {
-              statsMap[matchedUnit].responses.push(r)
-            } else if (unitQ.options.includes(rawVal)) {
-              statsMap[rawVal].responses.push(r)
+            const rawVal = getAnswerValue(uAns.answer).trim()
+            if (rawVal && rawVal !== '-' && rawVal !== '') {
+              const rawValUpper = rawVal.toLocaleUpperCase('tr-TR')
+              const matchedUnit = unitOptions.find((opt: string) => opt.toLocaleUpperCase('tr-TR').trim() === rawValUpper)
+              if (matchedUnit) {
+                statsMap[matchedUnit].responses.push(r)
+              }
             }
           }
         })

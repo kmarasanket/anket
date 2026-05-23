@@ -42,7 +42,10 @@ export default function AdminPeriodComparison() {
   // 1. Kuruma ait aktif anketleri yükle
   useEffect(() => {
     const loadSurveys = async () => {
-      if (!tenant?.id) return
+      if (!tenant?.id) {
+        setLoadingSurveys(false)
+        return
+      }
       setLoadingSurveys(true)
       try {
         const { data, error } = await httpFrom('surveys')
@@ -63,7 +66,7 @@ export default function AdminPeriodComparison() {
       }
     }
     loadSurveys()
-  }, [tenant])
+  }, [tenant?.id])
 
   // 2. Seçilen ankete ait soru ve cevapları yükle
   useEffect(() => {
