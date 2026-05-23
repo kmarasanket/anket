@@ -30,7 +30,7 @@ export default function AdminSurveyResults() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report' | 'exec_summary' | 'trend_report' | 'cross_tab' | 'word_cloud'>('list')
+  const [activeTab, setActiveTab] = useState<'list' | 'report' | 'score_report' | 'chart_report' | 'exec_summary' | 'summary_report' | 'trend_report' | 'cross_tab' | 'word_cloud'>('list')
   const [crossCategoryQ, setCrossCategoryQ] = useState<string>('')
   const [crossTargetQ, setCrossTargetQ] = useState<string>('')
   const [trendTargetQ, setTrendTargetQ] = useState<string>('')
@@ -459,6 +459,132 @@ export default function AdminSurveyResults() {
     return { catQ, tgtQ, catOptions, tgtOptions, matrix, catTotals }
   }, [crossCategoryQ, crossTargetQ, questions, filteredResponses])
 
+  const summaryReportData = useMemo(() => {
+    if (questions.length === 0 || filteredResponses.length === 0) return null
+
+    // 1. Demografi analizi
+    let genderQ = questions.find(q => {
+      const t = q.title.toLowerCase()
+      return (q.type === 'radio' || q.type === 'checkbox') && (t.includes('cinsiyet') || t.includes('gender'))
+    })
+    let eduQ = questions.find(q => {
+      const t = q.title.toLowerCase()
+      return (q.type === 'radio' || q.type === 'checkbox') && (t.includes('eğitim') || t.includes('öğrenim') || t.includes('mezun') || t.includes('okul'))
+    })
+    let ageQ = questions.find(q => {
+      const t = q.title.toLowerCase()
+      return (q.type === 'radio' || q.type === 'checkbox') && (t.includes('yaş') || t.includes('age'))
+    })
+    let unitQ = questions.find(q => {
+      const t = q.title.toLowerCase()
+      return (q.type === 'radio' || q.type === 'checkbox') && (t.includes('birim') || t.includes('departman') || t.includes('görev') || t.includes('unvan') || t.includes('rol'))
+    })
+
+    const getDemographicText = (q: any, prefix: string) => {
+      if (!q || !q.options || q.options.length === 0) return ''
+      const counts: Record<string, number> = {}
+      q.options.forEach((opt: string) => counts[opt] = 0)
+      
+      let total = 0
+      filteredResponses.forEach(r => {
+        const ans = findResponseAnswer(r, q)
+        const val = getAnswerValue(ans)
+        if (q.options.includes(val)) {
+          counts[val]++
+          total++
+        }
+      })
+      
+      if (total === 0) return ''
+      
+      const stats = q.options
+        .map((opt: string) => ({
+          name: opt,
+          count: counts[opt],
+          percent: Math.round((counts[opt] / total) * 100)
+        }))
+        .filter((s: any) => s.count > 0)
+        .sort((a: any, b: any) => b.percent - a.percent)
+        
+      if (stats.length === 0) return ''
+      
+      return prefix + ' ' + stats.map(s => `%${s.percent}'i ${s.name}`).join(', ') + ' olarak dağılım göstermektedir.'
+    }
+
+    const genderText = getDemographicText(genderQ, 'Katılımcıların cinsiyet dağılımına bakıldığında;')
+    const eduText = getDemographicText(eduQ, 'Katılımcıların eğitim durumları incelendiğinde;')
+    const ageText = getDemographicText(ageQ, 'Katılımcıların yaş gruplarına göre dağılımı;')
+    const unitText = getDemographicText(unitQ, 'Katılımcıların görev/birim dağılımı;')
+
+    // 2. Sorular bazında özet bilgiler
+    const radioAndCheckboxQs = questions.filter(q => q.type === 'radio' || q.type === 'checkbox')
+    
+    const questionNarratives = radioAndCheckboxQs.map((q, idx) => {
+      const options = q.options || []
+      const counts: Record<string, number> = {}
+      options.forEach((opt: string) => counts[opt] = 0)
+      
+      let total = 0
+      filteredResponses.forEach(r => {
+        const ans = findResponseAnswer(r, q)
+        const val = getAnswerValue(ans)
+        
+        if (q.type === 'checkbox') {
+          const selected = val.split(', ').map(s => s.trim())
+          selected.forEach(s => {
+            if (options.includes(s)) {
+              counts[s]++
+              total++
+            }
+          })
+        } else {
+          if (options.includes(val)) {
+            counts[val]++
+            total++
+          }
+        }
+      })
+
+      if (total === 0) {
+        return {
+          id: q.id,
+          title: q.title,
+          text: `Bu soruya herhangi bir yanıt verilmemiştir.`
+        }
+      }
+
+      const stats = options.map((opt: string) => ({
+        name: opt,
+        count: counts[opt],
+        percent: Math.round((counts[opt] / total) * 100)
+      })).sort((a: any, b: any) => b.count - a.count)
+
+      const dominant = stats[0]
+      const lowest = stats[stats.length - 1]
+
+      let narrative = ''
+      if (stats.length === 1) {
+        narrative = `Katılımcıların tamamı (%100) "${dominant.name}" seçeneğini tercih etmiştir.`
+      } else if (dominant.percent === lowest.percent) {
+        narrative = `Tüm seçenekler eşit oranda (%${dominant.percent}) tercih edilmiştir.`
+      } else {
+        narrative = `Katılımcıların en büyük oranı %${dominant.percent} ile "${dominant.name}" seçeneğini tercih ederken, en düşük katılım %${lowest.percent} oranı ile "${lowest.name}" seçeneğinde gerçekleşmiştir.`
+      }
+
+      return {
+        id: q.id,
+        title: q.title,
+        text: narrative,
+        stats: stats
+      }
+    })
+
+    return {
+      demographics: [genderText, eduText, ageText, unitText].filter(Boolean),
+      questionNarratives
+    }
+  }, [questions, filteredResponses])
+
   // Trend Analizi Verisi (Tarih filtrelerine göre filtrelenir)
   const trendData = useMemo(() => {
     if (!trendTargetQ) return null
@@ -837,6 +963,13 @@ export default function AdminSurveyResults() {
         >
           <LayoutList className="w-4 h-4" />
           Yönetici Özeti
+        </button>
+        <button 
+          onClick={() => setActiveTab('summary_report')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === 'summary_report' ? 'text-primary-400 border-primary-400 bg-primary-400/5' : 'text-dark-400 border-transparent hover:text-dark-200'}`}
+        >
+          <FileText className="w-4 h-4" />
+          Sonuç Raporu
         </button>
         <button 
           onClick={() => setActiveTab('trend_report')}
@@ -1649,6 +1782,250 @@ export default function AdminSurveyResults() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'summary_report' && (
+        <div className="card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5 text-primary-400" />
+              <h3 className="font-bold text-dark-100 font-sans">Anket Değerlendirme Raporu Önizleme</h3>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={async () => {
+                const element = document.getElementById('summary-report-print-area')
+                if (!element) return
+                element.classList.add('print-pdf-mode')
+                try {
+                  // @ts-ignore
+                  await html2pdf().set({
+                    margin: [10, 10, 10, 10],
+                    filename: `Anket_Degerlendirme_Raporu_${survey?.title || 'Rapor'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['css', 'legacy'], avoid: '.avoid-break' }
+                  }).from(element).save()
+                } finally {
+                  element.classList.remove('print-pdf-mode')
+                }
+              }} className="btn-md btn-primary gap-2">
+                <Download className="w-4 h-4" /> PDF Raporu İndir
+              </button>
+            </div>
+          </div>
+
+          {!summaryReportData ? (
+            <div className="p-12 text-center border border-dashed border-dark-700 rounded-xl">
+              <p className="text-dark-300">Bu rapor için yeterli veri bulunamadı.</p>
+            </div>
+          ) : (
+            <div className="flex justify-center bg-dark-950 p-4 sm:p-8 rounded-xl overflow-x-auto border border-dark-800 shadow-inner">
+              <div 
+                id="summary-report-print-area" 
+                className="bg-white text-black shadow-2xl relative w-full p-8 sm:p-12 rounded-2xl"
+                style={{ 
+                  boxSizing: 'border-box',
+                  fontFamily: 'Arial, sans-serif',
+                  maxWidth: '210mm',
+                  minHeight: '297mm',
+                  color: '#1a1a1a',
+                  lineHeight: '1.6'
+                }}
+              >
+                <style>{`
+                  .a4-report-container {
+                    font-family: Arial, sans-serif;
+                    color: #1a1a1a;
+                    line-height: 1.6;
+                    font-size: 14px;
+                  }
+                  .a4-report-header {
+                    border-bottom: 3px double #1e3a8a;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                  }
+                  .a4-report-logo {
+                    display: flex;
+                    justify-content: center;
+                    margin-bottom: 15px;
+                  }
+                  .a4-report-logo-circle {
+                    width: 60px;
+                    height: 60px;
+                    border-radius: 50%;
+                    border: 2px solid #1e3a8a;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: bold;
+                    color: #1e3a8a;
+                    font-size: 24px;
+                  }
+                  .a4-report-title {
+                    font-size: 22px;
+                    font-weight: bold;
+                    color: #1e3a8a;
+                    text-align: center;
+                    margin: 10px 0;
+                    letter-spacing: 0.5px;
+                  }
+                  .a4-report-meta {
+                    font-size: 13px;
+                    margin-top: 15px;
+                    background-color: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 8px;
+                    padding: 12px 15px;
+                  }
+                  .a4-report-meta-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                  }
+                  .a4-report-section-title {
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #1e3a8a;
+                    border-left: 4px solid #1e3a8a;
+                    padding-left: 10px;
+                    margin-top: 30px;
+                    margin-bottom: 15px;
+                    text-transform: uppercase;
+                  }
+                  .a4-report-p {
+                    margin-bottom: 15px;
+                    text-align: justify;
+                    text-indent: 20px;
+                  }
+                  .a4-report-question-item {
+                    margin-bottom: 16px;
+                    padding-bottom: 12px;
+                    border-bottom: 1px dashed #e2e8f0;
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                  }
+                  .a4-report-question-title {
+                    font-weight: bold;
+                    color: #2c3e50;
+                    margin-bottom: 5px;
+                  }
+                  .a4-report-question-text {
+                    color: #4a5568;
+                    text-indent: 10px;
+                  }
+                  .a4-report-summary-box {
+                    background-color: #eff6ff;
+                    border: 1px solid #bfdbfe;
+                    border-radius: 8px;
+                    padding: 15px;
+                    margin-top: 30px;
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                  }
+                  .a4-report-footer {
+                    margin-top: 40px;
+                    border-top: 1px solid #cbd5e1;
+                    padding-top: 15px;
+                    font-size: 11px;
+                    color: #64748b;
+                    text-align: center;
+                  }
+
+                  .print-pdf-mode {
+                    max-width: 100% !important;
+                    box-shadow: none !important;
+                    padding: 0 !important;
+                    border-radius: 0 !important;
+                  }
+                `}</style>
+                
+                <div className="a4-report-container">
+                  {/* Logo ve Başlık Alanı */}
+                  <div className="a4-report-header">
+                    <div className="a4-report-logo">
+                      <div className="a4-report-logo-circle">
+                        ✚
+                      </div>
+                    </div>
+                    <div className="a4-report-title">ANKET DEĞERLENDİRME RAPORU</div>
+                    
+                    {/* Meta Bilgileri */}
+                    <div className="a4-report-meta">
+                      <div className="a4-report-meta-grid">
+                        <div>Kurum Adı: <strong>{tenant?.name || '-'}</strong></div>
+                        <div>Anket Adı: <strong>{survey?.title}</strong></div>
+                        <div>Değerlendirme Dönemi: <strong>{selectedYear ? `${selectedYear} / ${MONTH_NAMES[Number(selectedMonth)] || 'Tümü'}` : (dateFrom ? `${dateFrom} - ${dateTo}` : 'Tüm Zamanlar')}</strong></div>
+                        <div>Katılımcı Sayısı: <strong>{filteredResponses.length} Kişi</strong></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1. GİRİŞ VE DEMOGRAFİK YAPI */}
+                  <div className="a4-report-section-title">1. GİRİŞ VE GENEL KATILIM BİLGİLERİ</div>
+                  <p className="a4-report-p">
+                    <strong>{tenant?.name || 'Kurumumuz'}</strong> bünyesinde, <strong>{selectedYear ? `${selectedYear} yılı ${MONTH_NAMES[Number(selectedMonth)] || ''}` : (dateFrom ? `${dateFrom} / ${dateTo}` : 'Tüm Zamanlar')}</strong> döneminde uygulanan <strong>"{survey?.title}"</strong> konulu geri bildirim anketine toplam <strong>{filteredResponses.length}</strong> kişi katılım sağlamıştır. Bu katılım oranı, kurumun ilgili dönemdeki evren ve örneklem hedeflerine ulaşmasında kritik bir veri kaynağı oluşturmaktadır.
+                  </p>
+                  {summaryReportData.demographics.length > 0 && (
+                    <p className="a4-report-p">
+                      Katılımcı profili incelendiğinde; {summaryReportData.demographics.join(' ')} Bu veriler, anket sonuçlarının temsil gücünü destekleyen önemli bir demografik çeşitlilik sunmaktadır.
+                    </p>
+                  )}
+
+                  {/* 2. SORU BAZINDA SONUÇ ANALİZLERİ */}
+                  <div className="a4-report-section-title">2. SORU BAZINDA SONUÇ ANALİZLERİ</div>
+                  <p className="a4-report-p" style={{ marginBottom: '20px' }}>
+                    Ankette yer alan soruların seçenek dağılımları ve katılımcıların tercih eğilimleri detaylandırılmış olup, her bir maddeye ilişkin özet analizler aşağıda sunulmuştur:
+                  </p>
+                  
+                  <div className="space-y-4">
+                    {summaryReportData.questionNarratives.map((narrative, idx) => (
+                      <div key={narrative.id} className="a4-report-question-item avoid-break">
+                        <div className="a4-report-question-title">
+                          Soru {idx + 1}: {stripQuestionPrefix(narrative.title)}
+                        </div>
+                        <div className="a4-report-question-text">
+                          {narrative.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 3. GENEL DEĞERLENDİRME VE ÖNERİLER */}
+                  {scoreReportData && scoreReportData.rows.length > 0 && (
+                    <div className="a4-report-summary-box avoid-break">
+                      <div style={{ fontWeight: 'bold', fontSize: '15px', color: '#1e3b82', marginBottom: '10px', textTransform: 'uppercase' }}>
+                        3. GENEL DEĞERLENDİRME VE SONUÇ
+                      </div>
+                      <p style={{ margin: 0, textAlign: 'justify', fontSize: '13px' }}>
+                        Anket sonuçlarının ağırlıklı puanlama sistemi ve karşılanma oranları çerçevesinde yapılan genel değerlendirmesinde; 
+                        memnuniyet düzeyinin en yüksek olduğu alanların başında sırasıyla 
+                        { [...scoreReportData.rows].sort((a, b) => b.percentage - a.percentage).slice(0, 3).map((row, i) => (
+                          <span key={i}>
+                            <strong> "{row.question}"</strong> (%{row.percentage}){i < 2 ? ',' : ''}
+                          </span>
+                        ))} konuları gelmektedir. Bu bulgular, belirtilen hizmet alanlarında kurumun oldukça güçlü ve başarılı bir performans sergilediğini ortaya koymaktadır.
+                      </p>
+                      <p style={{ marginTop: '10px', marginBottom: 0, textAlign: 'justify', fontSize: '13px' }}>
+                        Buna karşın, iyileştirilmeye en çok ihtiyaç duyulan ve memnuniyet seviyelerinin nispeten düşük seyrettiği alanlar ise sırasıyla 
+                        { [...scoreReportData.rows].sort((a, b) => a.percentage - b.percentage).slice(0, 3).map((row, i) => (
+                          <span key={i}>
+                            <strong> "{row.question}"</strong> (%{row.percentage}){i < 2 ? ',' : ''}
+                          </span>
+                        ))} olarak tespit edilmiştir. Kurumun stratejik hedefleri ve kalite politikası kapsamında, bu alanlardaki eksikliklerin giderilmesine yönelik planlama yapılması ve gerekli düzeltici/önleyici faaliyetlerin başlatılması önerilmektedir.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Rapor Alt Bilgisi */}
+                  <div className="a4-report-footer">
+                    Bu rapor otomatik olarak sistem üzerinden üretilmiştir. | Font: Arial | Sayfa Formatı: A4 Dikey (Portrait)
                   </div>
                 </div>
               </div>
