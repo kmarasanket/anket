@@ -344,27 +344,34 @@ export default function AdminSurveyResults() {
     if (textQuestions.length === 0) return null
 
     const wordsMap: Record<string, number> = {}
-    const stopWords = ['ve', 'ile', 'bir', 'çok', 'da', 'de', 'için', 'bu', 'gibi', 'kadar', 'daha', 'en', 'var', 'yok', 'olan', 'ama', 'fakat', 'ise', 'ki']
+    const stopWords = [
+      've', 'ile', 'bir', 'çok', 'da', 'de', 'için', 'bu', 'gibi', 'kadar', 'daha', 'en', 
+      'var', 'yok', 'olan', 'ama', 'fakat', 'ise', 'ki', 'bence', 'ben', 'sen', 'o', 'biz', 
+      'siz', 'onlar', 'her', 'hiç', 'şey', 'ise', 'mi', 'mı', 'mu', 'mü', 'veya', 'biri', 'ise', '-'
+    ]
 
     filteredResponses.forEach(r => {
       textQuestions.forEach(q => {
         const ans = r.response_answers?.find((a: any) => a.question_id === q.id)
-        if (ans && ans.answer_text) {
-          const text = ans.answer_text.toLocaleLowerCase('tr-TR')
-          // Extract words with 3+ characters (basic Turkish letter support)
-          const words = text.match(/[a-zçğıöşü]{3,}/g) || [] 
-          words.forEach((w: string) => {
-            if (!stopWords.includes(w)) {
-              wordsMap[w] = (wordsMap[w] || 0) + 1
-            }
-          })
+        if (ans) {
+          const textVal = getAnswerValue(ans)
+          if (textVal && textVal !== '-') {
+            const text = textVal.toLocaleLowerCase('tr-TR')
+            // Extract words with 3+ characters (Turkish letters support)
+            const words = text.match(/[a-zçğıöşüâêîûô]{3,}/g) || [] 
+            words.forEach((w: string) => {
+              if (!stopWords.includes(w)) {
+                wordsMap[w] = (wordsMap[w] || 0) + 1
+              }
+            })
+          }
         }
       })
     })
 
     const wordsArr = Object.entries(wordsMap)
       .map(([text, value]) => ({ text, value }))
-      .filter(w => w.value > 1)
+      .filter(w => w.value >= 1) // En az 1 kez geçen kelimeleri de gösterelim ki kelime bulutu boş kalmasın
       .sort((a, b) => b.value - a.value)
       .slice(0, 50)
 
