@@ -241,6 +241,21 @@ export default function AdminSurveyResults() {
     return String(raw)
   }
 
+  // Sorudan cevap değerlerini dizi olarak oku (tek seçim veya çoklu seçim)
+  const getAnswerValues = (answer: any): string[] => {
+    if (answer == null) return []
+    const raw = answer.answer
+    if (raw == null || raw === '') return []
+    if (typeof raw === 'object' && !Array.isArray(raw) && 'value' in raw) {
+      const v = raw.value
+      if (v == null || v === '') return []
+      return Array.isArray(v) ? v.map(String) : [String(v)]
+    }
+    if (Array.isArray(raw)) return raw.map(String)
+    const str = String(raw)
+    return str.includes(', ') ? str.split(', ').map(s => s.trim()) : [str]
+  }
+
   // Soru başlığındaki öneki temizle: "1-", "2.", "3) " → başlık metni
   const stripQuestionPrefix = (title: string): string => {
     return title.replace(/^\d+[-.)\s]+\s*/, '').trim()
@@ -282,8 +297,10 @@ export default function AdminSurveyResults() {
       
       filteredResponses.forEach(r => {
         const ans = findResponseAnswer(r, q)
-        const val = getAnswerValue(ans)
-        if (options.includes(val)) counts[val]++
+        const vals = getAnswerValues(ans)
+        vals.forEach(val => {
+          if (options.includes(val)) counts[val]++
+        })
       })
       return { question: stripQuestionPrefix(q.title), counts }
     })
@@ -294,7 +311,8 @@ export default function AdminSurveyResults() {
       options.forEach((opt: string) => totals[opt] += r.counts[opt])
     })
 
-    const grandTotal = targetQuestions.length * filteredResponses.length
+    const totalSelections = Object.values(totals).reduce((sum, val) => sum + val, 0)
+    const grandTotal = totalSelections > 0 ? totalSelections : (targetQuestions.length * filteredResponses.length)
     const percentages: Record<string, string> = {}
     options.forEach((opt: string) => {
       percentages[opt] = grandTotal > 0 ? ((totals[opt] / grandTotal) * 100).toFixed(1) + '%' : '0%'
@@ -452,15 +470,19 @@ export default function AdminSurveyResults() {
     filteredResponses.forEach(r => {
       const catAns = findResponseAnswer(r, catQ)
       const tgtAns = findResponseAnswer(r, tgtQ)
-      const catVal = getAnswerValue(catAns)
-      const tgtVal = getAnswerValue(tgtAns)
+      const catVals = getAnswerValues(catAns)
+      const tgtVals = getAnswerValues(tgtAns)
 
-      if (catOptions.includes(catVal)) {
-        catTotals[catVal]++
-        if (tgtOptions.includes(tgtVal)) {
-          matrix[catVal][tgtVal]++
+      catVals.forEach(catVal => {
+        if (catOptions.includes(catVal)) {
+          catTotals[catVal]++
+          tgtVals.forEach(tgtVal => {
+            if (tgtOptions.includes(tgtVal)) {
+              matrix[catVal][tgtVal]++
+            }
+          })
         }
-      }
+      })
     })
 
     return { catQ, tgtQ, catOptions, tgtOptions, matrix, catTotals }
@@ -495,11 +517,13 @@ export default function AdminSurveyResults() {
       let total = 0
       filteredResponses.forEach(r => {
         const ans = findResponseAnswer(r, q)
-        const val = getAnswerValue(ans)
-        if (q.options.includes(val)) {
-          counts[val]++
-          total++
-        }
+        const vals = getAnswerValues(ans)
+        vals.forEach(val => {
+          if (q.options.includes(val)) {
+            counts[val]++
+            total++
+          }
+        })
       })
       
       if (total === 0) return ''
@@ -534,22 +558,13 @@ export default function AdminSurveyResults() {
       let total = 0
       filteredResponses.forEach(r => {
         const ans = findResponseAnswer(r, q)
-        const val = getAnswerValue(ans)
-        
-        if (q.type === 'checkbox') {
-          const selected = val.split(', ').map(s => s.trim())
-          selected.forEach(s => {
-            if (options.includes(s)) {
-              counts[s]++
-              total++
-            }
-          })
-        } else {
-          if (options.includes(val)) {
-            counts[val]++
+        const vals = getAnswerValues(ans)
+        vals.forEach(s => {
+          if (options.includes(s)) {
+            counts[s]++
             total++
           }
-        }
+        })
       })
 
       if (total === 0) {
@@ -710,14 +725,8 @@ export default function AdminSurveyResults() {
           let count = 0
           filteredResponses.forEach(r => {
             const ans = findResponseAnswer(r, q)
-            const val = getAnswerValue(ans)
-            // Checkbox ise virgülle ayrılmış olabilir
-            if (q.type === 'checkbox') {
-              const selectedOpts = val.split(', ').map(s => s.trim())
-              if (selectedOpts.includes(opt)) count++
-            } else {
-              if (val === opt) count++
-            }
+            const vals = getAnswerValues(ans)
+            if (vals.includes(opt)) count++
           })
           data.push({ name: opt, value: count })
         })

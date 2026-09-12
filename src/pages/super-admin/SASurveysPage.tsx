@@ -100,7 +100,7 @@ export default function SASurveysPage() {
       if (originalQuestions && originalQuestions.length > 0) {
         const questionsToInsert = originalQuestions.map((q: any) => ({
           survey_id: newSurveyId,
-          type: q.type === 'checkbox' ? 'radio' : q.type,
+          type: q.type,
           title: q.title,
           description: q.description,
           options: q.options,

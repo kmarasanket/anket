@@ -17,6 +17,7 @@ const QUESTION_TYPES: { type: QuestionType; label: string; icon: any }[] = [
   { type: 'text', label: 'Kısa Metin', icon: Baseline },
   { type: 'textarea', label: 'Uzun Metin (Açıklama)', icon: AlignLeft },
   { type: 'radio', label: 'Tek Seçimli', icon: CircleDot },
+  { type: 'checkbox', label: 'Çoklu Seçimli', icon: CheckSquare },
   { type: 'rating', label: 'Yıldız/Derece', icon: Star },
   { type: 'date', label: 'Tarih', icon: Calendar },
 ]
@@ -80,8 +81,7 @@ export default function AdminSurveyBuilder() {
             tenant_id: survey.tenant_id
           })
           const mappedQuestions = (questionsRes.data || []).map((q: any) => ({
-            ...q,
-            type: q.type === 'checkbox' ? 'radio' : q.type
+            ...q
           }))
           setQuestions(mappedQuestions)
         }
